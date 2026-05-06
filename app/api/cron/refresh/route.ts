@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { snapshots, dailySpend } from "@/db/schema";
 import { fetchOpenAIUsage } from "@/lib/openai";
 import { fetchMetaUsage } from "@/lib/meta";
+import { fetchHubSpotLeads } from "@/lib/hubspot";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -77,6 +78,31 @@ async function runRefresh() {
     };
   } catch (err) {
     errors.meta = err instanceof Error ? err.message : String(err);
+  }
+
+  const hubspotToken = process.env.HUBSPOT_TOKEN?.trim();
+  const hubspotPipeline = process.env.HUBSPOT_DEAL_PIPELINE?.trim();
+  if (!hubspotToken || !hubspotPipeline) {
+    results.hubspot_b2c = {
+      skipped: true,
+      reason: "HUBSPOT_TOKEN or HUBSPOT_DEAL_PIPELINE not set",
+    };
+  } else try {
+    const hub = await fetchHubSpotLeads(hubspotToken, hubspotPipeline, 90);
+    await db.insert(snapshots).values({
+      source: "hubspot_b2c",
+      currency: "LEADS",
+      totalSpent: hub.totalLeads.toFixed(4),
+      raw: { daily: hub.daily, pipelineName: hub.pipelineName, pipelineId: hub.pipelineId },
+    });
+    await upsertDaily("hubspot_b2c", "LEADS", hub.daily);
+    results.hubspot_b2c = {
+      totalLeads: hub.totalLeads,
+      pipelineName: hub.pipelineName,
+      days: hub.daily.length,
+    };
+  } catch (err) {
+    errors.hubspot_b2c = err instanceof Error ? err.message : String(err);
   }
 
   const status = Object.keys(errors).length === 0 ? 200 : 207;

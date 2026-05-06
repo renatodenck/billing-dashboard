@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
@@ -163,6 +165,10 @@ export default function DashboardPage() {
           {(Object.keys(SOURCE_META) as SourceKey[]).map((key) => (
             <SourceCard key={key} source={key} data={data} range={range} />
           ))}
+        </div>
+
+        <div className="mt-6">
+          <AcquisitionCard data={data} range={range} />
         </div>
 
         <footer className="mt-12 border-t border-psa-line pt-6 text-center text-xs text-psa-muted">
@@ -374,6 +380,131 @@ function SourceCard({
                   fill={`url(#grad-${source})`}
                 />
               </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AcquisitionCard({
+  data,
+  range,
+}: {
+  data: DashboardPayload | null;
+  range: DateRange;
+}) {
+  const metaDaily = data?.daily.meta ?? [];
+  const leadsDaily = data?.daily.hubspot_b2c ?? [];
+  const hubspotSource = data?.sources.hubspot_b2c;
+
+  const filteredMeta = useMemo(() => filterDaily(metaDaily, range), [metaDaily, range]);
+  const filteredLeads = useMemo(() => filterDaily(leadsDaily, range), [leadsDaily, range]);
+
+  const totalSpend = filteredMeta.reduce((s, d) => s + d.amount, 0);
+  const totalLeads = filteredLeads.reduce((s, d) => s + d.amount, 0);
+  const cac = totalLeads > 0 ? totalSpend / totalLeads : null;
+
+  const metaCurrency = data?.sources.meta?.currency ?? "BRL";
+  const pipelineLabel = hubspotSource?.accountName ?? "—";
+
+  const hubspotConfigured = leadsDaily.length > 0 || hubspotSource?.capturedAt != null;
+
+  if (!hubspotConfigured) {
+    return (
+      <section className="rounded-2xl border border-dashed border-psa-line bg-white px-6 py-8 text-center text-sm text-psa-muted">
+        Configure as variáveis <code className="text-psa-ink">HUBSPOT_TOKEN</code> e{" "}
+        <code className="text-psa-ink">HUBSPOT_DEAL_PIPELINE</code> pra ver o CAC aqui.
+      </section>
+    );
+  }
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-psa-line bg-white shadow-sm">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-psa-line px-6 py-4">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-psa-orange-soft text-sm font-bold text-psa-orange">
+            ⚡
+          </span>
+          <div>
+            <h3 className="text-base font-semibold text-psa-ink">Aquisição B2C</h3>
+            <p className="text-xs text-psa-muted">
+              CAC = Gasto Meta Ads ÷ Leads novos no HubSpot · Pipeline:{" "}
+              <span className="text-psa-ink">{pipelineLabel}</span>
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-2 gap-px bg-psa-line sm:grid-cols-4">
+        <Stat
+          label="CAC do período"
+          value={cac}
+          currency={metaCurrency}
+          highlight
+          accent="#FF640F"
+        />
+        <Stat label="Leads novos" raw={String(totalLeads)} />
+        <Stat
+          label="Gasto Meta Ads"
+          value={totalSpend > 0 ? totalSpend : null}
+          currency={metaCurrency}
+        />
+        <Stat
+          label="Custo médio/dia"
+          value={
+            filteredMeta.length > 0 && totalSpend > 0
+              ? totalSpend / filteredMeta.length
+              : null
+          }
+          currency={metaCurrency}
+        />
+      </div>
+
+      <div className="px-4 pb-5 pt-4">
+        <div className="h-44">
+          {filteredLeads.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-sm text-psa-muted">
+              Sem leads no período selecionado.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={filteredLeads}
+                margin={{ top: 5, right: 10, left: -15, bottom: 0 }}
+              >
+                <CartesianGrid stroke="#EEF1F5" vertical={false} />
+                <XAxis
+                  dataKey="day"
+                  tickFormatter={formatDateBR}
+                  stroke="#9AA4B2"
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                  minTickGap={24}
+                />
+                <YAxis
+                  stroke="#9AA4B2"
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "#FFFFFF",
+                    border: "1px solid #E6E9EF",
+                    borderRadius: 10,
+                    fontSize: 12,
+                    boxShadow: "0 4px 16px rgba(11,19,32,0.08)",
+                  }}
+                  labelStyle={{ color: "#0B1320", fontWeight: 600 }}
+                  labelFormatter={formatDateBR}
+                  formatter={(value: number) => [`${value} lead${value === 1 ? "" : "s"}`, "Novos"]}
+                />
+                <Bar dataKey="amount" fill="#FF640F" radius={[4, 4, 0, 0]} />
+              </BarChart>
             </ResponsiveContainer>
           )}
         </div>

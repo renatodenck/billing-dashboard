@@ -22,7 +22,7 @@ export type DashboardPayload = {
 };
 
 export async function GET() {
-  const sources = ["openai", "meta"];
+  const sources = ["openai", "meta", "hubspot_b2c"];
   const result: DashboardPayload = { sources: {}, daily: {} };
 
   for (const source of sources) {
@@ -33,10 +33,11 @@ export async function GET() {
       .orderBy(desc(snapshots.capturedAt))
       .limit(1);
 
-    const accountName =
-      latest?.raw && typeof latest.raw === "object" && "accountName" in (latest.raw as object)
-        ? ((latest.raw as { accountName?: string }).accountName ?? null)
+    const raw =
+      latest?.raw && typeof latest.raw === "object"
+        ? (latest.raw as { accountName?: string; pipelineName?: string })
         : null;
+    const accountName = raw?.accountName ?? raw?.pipelineName ?? null;
 
     result.sources[source] = latest
       ? {
