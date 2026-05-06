@@ -318,11 +318,7 @@ function SourceCard({
           value={stats.max.amount > 0 ? stats.max.amount : null}
           currency={currency}
         />
-        {source === "meta" ? (
-          <Stat label="Saldo atual" value={summary?.balance} currency={currency} />
-        ) : (
-          <Stat label="Moeda" raw={currency} />
-        )}
+        <Stat label="Moeda" raw={currency} />
       </div>
 
       <div className="px-4 pb-5 pt-4">
