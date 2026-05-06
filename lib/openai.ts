@@ -82,7 +82,8 @@ export async function fetchOpenAIUsage(adminKey: string, days = 60): Promise<Ope
     const day = dayKey(b.start_time);
     let amount = 0;
     for (const r of b.results) {
-      amount += r.amount.value;
+      const value = typeof r.amount.value === "string" ? parseFloat(r.amount.value) : r.amount.value;
+      amount += Number.isFinite(value) ? value : 0;
       if (r.amount.currency) currency = r.amount.currency.toUpperCase();
     }
     daily.push({ day, amount });

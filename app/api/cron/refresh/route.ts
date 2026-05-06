@@ -51,12 +51,12 @@ async function runRefresh() {
     errors.openai = err instanceof Error ? err.message : String(err);
   }
 
-  try {
-    const meta = await fetchMetaUsage(
-      process.env.META_ACCESS_TOKEN!,
-      process.env.META_AD_ACCOUNT_ID!,
-      60
-    );
+  const metaToken = process.env.META_ACCESS_TOKEN?.trim();
+  const metaAccountId = process.env.META_AD_ACCOUNT_ID?.trim();
+  if (!metaToken || !metaAccountId) {
+    results.meta = { skipped: true, reason: "META_ACCESS_TOKEN or META_AD_ACCOUNT_ID not set" };
+  } else try {
+    const meta = await fetchMetaUsage(metaToken, metaAccountId, 60);
     await db.insert(snapshots).values({
       source: "meta",
       currency: meta.currency,
