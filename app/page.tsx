@@ -446,9 +446,9 @@ function AcquisitionCard({
             ⚡
           </span>
           <div>
-            <h3 className="text-base font-semibold text-psa-ink">Aquisição B2C</h3>
+            <h3 className="text-base font-semibold text-psa-ink">Qualificação B2C</h3>
             <p className="text-xs text-psa-muted">
-              CAC = (Gasto OpenAI + Custo WhatsApp) ÷ Leads qualificados ·{" "}
+              CPO = (Gasto OpenAI + Custo WhatsApp) ÷ Leads qualificados ·{" "}
               <span className="text-psa-ink">{pipelineLabel}</span>
               {currencyMismatch && (
                 <span className="ml-2 inline-flex items-center rounded bg-psa-orange-soft px-1.5 py-0.5 text-[10px] font-semibold text-psa-orange">
@@ -462,7 +462,7 @@ function AcquisitionCard({
 
       <div className="grid grid-cols-2 gap-px bg-psa-line sm:grid-cols-4">
         <Stat
-          label="CAC do período"
+          label="CPO do período"
           value={cac}
           currency={reportCurrency}
           highlight
