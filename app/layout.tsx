@@ -10,7 +10,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Custos de IA & Mídia · PSA",
-  description: "Painel de custos OpenAI e Meta Ads · Profissionaissa",
+  description: "Painel de custos de IA e disparos de WhatsApp · Profissionaissa",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
