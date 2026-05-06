@@ -2,6 +2,7 @@ import { brDay } from "./format";
 
 export type RangePreset =
   | "today"
+  | "yesterday"
   | "7d"
   | "30d"
   | "60d"
@@ -14,6 +15,7 @@ export type DateRange = { since: string; until: string };
 
 export const PRESET_LABELS: Record<RangePreset, string> = {
   today: "Hoje",
+  yesterday: "Ontem",
   "7d": "7 dias",
   "30d": "30 dias",
   "60d": "60 dias",
@@ -39,6 +41,11 @@ export function presetToRange(
   if (preset === "custom") return custom;
 
   if (preset === "today") return { since: todayStr, until: todayStr };
+
+  if (preset === "yesterday") {
+    const yesterday = brDay(Date.now() - DAY_MS);
+    return { since: yesterday, until: yesterday };
+  }
 
   if (preset === "all") {
     const days = daily.map((d) => d.day).sort();

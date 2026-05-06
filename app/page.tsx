@@ -34,6 +34,7 @@ type SourceKey = keyof typeof SOURCE_META;
 
 const PRESET_ORDER: RangePreset[] = [
   "today",
+  "yesterday",
   "7d",
   "30d",
   "60d",
