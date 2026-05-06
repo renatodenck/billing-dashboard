@@ -5,6 +5,8 @@ import { snapshots, dailySpend } from "@/db/schema";
 import { fetchOpenAIUsage } from "@/lib/openai";
 import { fetchMetaUsage } from "@/lib/meta";
 import { fetchHubSpotLeads } from "@/lib/hubspot";
+import { brDay } from "@/lib/format";
+import { gt } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -103,6 +105,14 @@ async function runRefresh() {
     };
   } catch (err) {
     errors.hubspot_b2c = err instanceof Error ? err.message : String(err);
+  }
+
+  // Defensive cleanup: remove any future-dated rows (leftovers from when buckets were UTC)
+  try {
+    const today = brDay();
+    await db.delete(dailySpend).where(gt(dailySpend.day, today));
+  } catch (err) {
+    errors.cleanup = err instanceof Error ? err.message : String(err);
   }
 
   const status = Object.keys(errors).length === 0 ? 200 : 207;
