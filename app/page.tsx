@@ -13,6 +13,15 @@ import {
 import { RefreshCw } from "lucide-react";
 import type { DashboardPayload } from "./api/data/route";
 import { formatDateBR, formatMoney } from "@/lib/format";
+import {
+  filterDaily,
+  formatRangeLabel,
+  PRESET_LABELS,
+  presetToRange,
+  rangeStats,
+  type DateRange,
+  type RangePreset,
+} from "@/lib/dateRange";
 
 const SOURCE_META = {
   openai: { label: "OpenAI", accent: "#FF640F", soft: "#FFE5D5", caption: "Inteligência Artificial" },
@@ -21,10 +30,26 @@ const SOURCE_META = {
 
 type SourceKey = keyof typeof SOURCE_META;
 
+const PRESET_ORDER: RangePreset[] = [
+  "today",
+  "7d",
+  "30d",
+  "60d",
+  "thisMonth",
+  "lastMonth",
+  "all",
+  "custom",
+];
+
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [preset, setPreset] = useState<RangePreset>("30d");
+  const [customRange, setCustomRange] = useState<DateRange>(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return { since: today, until: today };
+  });
 
   async function load() {
     setLoading(true);
@@ -44,6 +69,16 @@ export default function DashboardPage() {
   useEffect(() => {
     load();
   }, []);
+
+  const allDaily = useMemo(() => {
+    if (!data) return [];
+    return [...(data.daily.openai ?? []), ...(data.daily.meta ?? [])];
+  }, [data]);
+
+  const range = useMemo(
+    () => presetToRange(preset, customRange, allDaily),
+    [preset, customRange, allDaily]
+  );
 
   const lastUpdate = useMemo(() => {
     if (!data) return null;
@@ -80,7 +115,7 @@ export default function DashboardPage() {
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-10">
-        <div className="mb-8 flex items-end justify-between">
+        <div className="mb-8 flex items-end justify-between gap-4">
           <div>
             <p className="text-sm font-medium uppercase tracking-[0.18em] text-psa-orange">
               Painel financeiro
@@ -107,6 +142,17 @@ export default function DashboardPage() {
           )}
         </div>
 
+        <RangeBar
+          preset={preset}
+          customRange={customRange}
+          range={range}
+          onPreset={setPreset}
+          onCustomRange={(r) => {
+            setCustomRange(r);
+            setPreset("custom");
+          }}
+        />
+
         {error && (
           <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             Erro ao carregar dados: {error}
@@ -115,7 +161,7 @@ export default function DashboardPage() {
 
         <div className="grid gap-6 md:grid-cols-2">
           {(Object.keys(SOURCE_META) as SourceKey[]).map((key) => (
-            <SourceCard key={key} source={key} data={data} />
+            <SourceCard key={key} source={key} data={data} range={range} />
           ))}
         </div>
 
@@ -127,21 +173,103 @@ export default function DashboardPage() {
   );
 }
 
+function RangeBar({
+  preset,
+  customRange,
+  range,
+  onPreset,
+  onCustomRange,
+}: {
+  preset: RangePreset;
+  customRange: DateRange;
+  range: DateRange;
+  onPreset: (p: RangePreset) => void;
+  onCustomRange: (r: DateRange) => void;
+}) {
+  return (
+    <div className="mb-6 rounded-2xl border border-psa-line bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {PRESET_ORDER.map((p) => {
+            const active = preset === p;
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => onPreset(p)}
+                className={
+                  "rounded-full px-3 py-1.5 text-xs font-medium transition " +
+                  (active
+                    ? "bg-psa-ink text-white"
+                    : "bg-white text-psa-muted hover:bg-psa-line/40 hover:text-psa-ink")
+                }
+              >
+                {PRESET_LABELS[p]}
+              </button>
+            );
+          })}
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-psa-muted">
+            Período selecionado
+          </p>
+          <p className="text-sm font-semibold tabular-nums text-psa-ink">
+            {formatRangeLabel(range)}
+          </p>
+        </div>
+      </div>
+
+      {preset === "custom" && (
+        <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-psa-line pt-4">
+          <div>
+            <label className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-psa-muted">
+              De
+            </label>
+            <input
+              type="date"
+              value={customRange.since}
+              max={customRange.until}
+              onChange={(e) =>
+                onCustomRange({ ...customRange, since: e.target.value })
+              }
+              className="mt-1 rounded-md border border-psa-line bg-white px-3 py-1.5 text-sm text-psa-ink focus:border-psa-orange focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-psa-muted">
+              Até
+            </label>
+            <input
+              type="date"
+              value={customRange.until}
+              min={customRange.since}
+              onChange={(e) =>
+                onCustomRange({ ...customRange, until: e.target.value })
+              }
+              className="mt-1 rounded-md border border-psa-line bg-white px-3 py-1.5 text-sm text-psa-ink focus:border-psa-orange focus:outline-none"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SourceCard({
   source,
   data,
+  range,
 }: {
   source: SourceKey;
   data: DashboardPayload | null;
+  range: DateRange;
 }) {
   const meta = SOURCE_META[source];
   const summary = data?.sources[source];
-  const daily = data?.daily[source] ?? [];
+  const dailyAll = data?.daily[source] ?? [];
 
-  const chartData = useMemo(
-    () => daily.slice(-30).map((d) => ({ day: d.day, amount: d.amount })),
-    [daily]
-  );
+  const filtered = useMemo(() => filterDaily(dailyAll, range), [dailyAll, range]);
+  const stats = useMemo(() => rangeStats(filtered), [filtered]);
 
   const currency = summary?.currency ?? "USD";
 
@@ -166,35 +294,41 @@ function SourceCard({
       </header>
 
       <div className="grid grid-cols-2 gap-px bg-psa-line sm:grid-cols-4">
-        <Stat label="Hoje" value={summary?.spentToday} currency={currency} accent={meta.accent} />
         <Stat
-          label="Mês atual"
-          value={summary?.spentMonth}
+          label="Total no período"
+          value={stats.total}
           currency={currency}
+          highlight
           accent={meta.accent}
         />
         <Stat
-          label="Acumulado"
-          value={summary?.totalSpent}
+          label="Média/dia"
+          value={stats.days > 0 ? stats.avg : null}
           currency={currency}
-          accent={meta.accent}
+        />
+        <Stat
+          label={stats.max.day ? `Pico (${formatDateBR(stats.max.day)})` : "Pico"}
+          value={stats.max.amount > 0 ? stats.max.amount : null}
+          currency={currency}
         />
         {source === "meta" ? (
-          <Stat label="Saldo" value={summary?.balance} currency={currency} accent={meta.accent} />
+          <Stat label="Saldo atual" value={summary?.balance} currency={currency} />
         ) : (
-          <Stat label="Moeda" raw={currency} accent={meta.accent} />
+          <Stat label="Moeda" raw={currency} />
         )}
       </div>
 
       <div className="px-4 pb-5 pt-4">
         <div className="h-44">
-          {chartData.length === 0 ? (
+          {filtered.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-psa-muted">
-              Sem dados ainda — aguarde o primeiro snapshot.
+              {dailyAll.length === 0
+                ? "Sem dados ainda — aguarde o primeiro snapshot."
+                : "Sem registros no período selecionado."}
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
+              <AreaChart data={filtered} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
                 <defs>
                   <linearGradient id={`grad-${source}`} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={meta.accent} stopOpacity={0.35} />
@@ -209,6 +343,7 @@ function SourceCard({
                   fontSize={11}
                   tickLine={false}
                   axisLine={false}
+                  minTickGap={24}
                 />
                 <YAxis
                   stroke="#9AA4B2"
@@ -252,13 +387,15 @@ function Stat({
   value,
   currency,
   raw,
+  highlight,
   accent,
 }: {
   label: string;
   value?: number | null;
   currency?: string;
   raw?: string;
-  accent: string;
+  highlight?: boolean;
+  accent?: string;
 }) {
   const display =
     raw !== undefined
@@ -273,7 +410,7 @@ function Stat({
       </div>
       <div
         className="mt-1 text-xl font-semibold tabular-nums"
-        style={{ color: accent === "#FF640F" || raw ? "#0B1320" : "#0B1320" }}
+        style={{ color: highlight && accent ? accent : "#0B1320" }}
       >
         {display}
       </div>
