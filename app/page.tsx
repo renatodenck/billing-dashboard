@@ -395,21 +395,41 @@ function AcquisitionCard({
   data: DashboardPayload | null;
   range: DateRange;
 }) {
+  const openaiDaily = data?.daily.openai ?? [];
   const metaDaily = data?.daily.meta ?? [];
   const leadsDaily = data?.daily.hubspot_b2c ?? [];
   const hubspotSource = data?.sources.hubspot_b2c;
 
+  const filteredOpenai = useMemo(() => filterDaily(openaiDaily, range), [openaiDaily, range]);
   const filteredMeta = useMemo(() => filterDaily(metaDaily, range), [metaDaily, range]);
   const filteredLeads = useMemo(() => filterDaily(leadsDaily, range), [leadsDaily, range]);
 
-  const totalSpend = filteredMeta.reduce((s, d) => s + d.amount, 0);
+  const openaiSpend = filteredOpenai.reduce((s, d) => s + d.amount, 0);
+  const metaSpend = filteredMeta.reduce((s, d) => s + d.amount, 0);
   const totalLeads = filteredLeads.reduce((s, d) => s + d.amount, 0);
+
+  const openaiCurrency = data?.sources.openai?.currency ?? "USD";
+  const metaCurrency = data?.sources.meta?.currency ?? null;
+
+  const usdToBrl = Number(process.env.NEXT_PUBLIC_USD_TO_BRL ?? "5.0") || 5.0;
+
+  // Choose a single currency for the combined CAC.
+  // If Meta is configured and not USD, convert OpenAI USD into Meta's currency (assume BRL).
+  // Otherwise keep everything in OpenAI's currency.
+  const reportCurrency = metaCurrency && metaCurrency !== openaiCurrency ? metaCurrency : openaiCurrency;
+  const openaiInReport =
+    openaiCurrency === reportCurrency
+      ? openaiSpend
+      : openaiCurrency === "USD" && reportCurrency === "BRL"
+        ? openaiSpend * usdToBrl
+        : openaiSpend; // fallback: assume same magnitude
+  const totalSpend = openaiInReport + metaSpend;
   const cac = totalLeads > 0 ? totalSpend / totalLeads : null;
 
-  const metaCurrency = data?.sources.meta?.currency ?? "BRL";
   const pipelineLabel = hubspotSource?.accountName ?? "—";
-
   const hubspotConfigured = leadsDaily.length > 0 || hubspotSource?.capturedAt != null;
+  const currencyMismatch =
+    metaCurrency != null && metaCurrency !== openaiCurrency;
 
   if (!hubspotConfigured) {
     return (
@@ -430,8 +450,13 @@ function AcquisitionCard({
           <div>
             <h3 className="text-base font-semibold text-psa-ink">Aquisição B2C</h3>
             <p className="text-xs text-psa-muted">
-              CAC = Gasto Meta Ads ÷ Leads novos no HubSpot · Pipeline:{" "}
+              CAC = (Gasto OpenAI + Gasto Meta Ads) ÷ Leads no HubSpot · Pipeline:{" "}
               <span className="text-psa-ink">{pipelineLabel}</span>
+              {currencyMismatch && (
+                <span className="ml-2 inline-flex items-center rounded bg-psa-orange-soft px-1.5 py-0.5 text-[10px] font-semibold text-psa-orange">
+                  USD→BRL @ {usdToBrl.toFixed(2)}
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -441,24 +466,20 @@ function AcquisitionCard({
         <Stat
           label="CAC do período"
           value={cac}
-          currency={metaCurrency}
+          currency={reportCurrency}
           highlight
           accent="#FF640F"
         />
-        <Stat label="Leads novos" raw={String(totalLeads)} />
+        <Stat label="Leads novos" raw={totalLeads.toLocaleString("pt-BR")} />
         <Stat
-          label="Gasto Meta Ads"
-          value={totalSpend > 0 ? totalSpend : null}
-          currency={metaCurrency}
+          label={`Gasto IA${openaiCurrency !== reportCurrency ? ` (${openaiCurrency})` : ""}`}
+          value={openaiSpend > 0 ? openaiSpend : null}
+          currency={openaiCurrency}
         />
         <Stat
-          label="Custo médio/dia"
-          value={
-            filteredMeta.length > 0 && totalSpend > 0
-              ? totalSpend / filteredMeta.length
-              : null
-          }
-          currency={metaCurrency}
+          label="Gasto Mídia"
+          value={metaSpend > 0 ? metaSpend : null}
+          currency={metaCurrency ?? reportCurrency}
         />
       </div>
 
