@@ -1,16 +1,19 @@
 const API = "https://api.hubapi.com";
+const OBJECT_TYPE = "leads";
+const CREATEDATE_PROP = "hs_createdate";
+const PIPELINE_PROP = "hs_pipeline";
 
 type Pipeline = { id: string; label: string };
 type PipelinesResponse = { results: Pipeline[] };
 
-type DealSearchResult = {
+type LeadSearchResult = {
   id: string;
-  properties: { createdate: string };
+  properties: Record<string, string | null>;
 };
 
-type DealSearchResponse = {
+type LeadSearchResponse = {
   total: number;
-  results: DealSearchResult[];
+  results: LeadSearchResult[];
   paging?: { next?: { after?: string } };
 };
 
@@ -31,16 +34,17 @@ async function fetchJson<T>(url: string, init: RequestInit): Promise<T> {
 }
 
 async function resolvePipelineId(token: string, pipelineName: string): Promise<string> {
-  const json = await fetchJson<PipelinesResponse>(`${API}/crm/v3/pipelines/deals`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const match = json.results.find(
-    (p) => p.label.trim().toLowerCase() === pipelineName.trim().toLowerCase()
+  const json = await fetchJson<PipelinesResponse>(
+    `${API}/crm/v3/pipelines/${OBJECT_TYPE}`,
+    { headers: { Authorization: `Bearer ${token}` } }
   );
+  const norm = (s: string) => s.trim().toLowerCase();
+  const target = norm(pipelineName);
+  const match = json.results.find((p) => norm(p.label) === target);
   if (!match) {
     const available = json.results.map((p) => `"${p.label}"`).join(", ");
     throw new Error(
-      `HubSpot pipeline "${pipelineName}" not found. Available: ${available}`
+      `HubSpot ${OBJECT_TYPE} pipeline "${pipelineName}" not found. Available: ${available}`
     );
   }
   return match.id;
@@ -57,35 +61,36 @@ export async function fetchHubSpotLeads(
   pipelineNameOrId: string,
   days = 90
 ): Promise<HubSpotLeads> {
-  const looksLikeId = /^\d+$/.test(pipelineNameOrId.trim());
+  const trimmed = pipelineNameOrId.trim();
+  const looksLikeId = /^[0-9]+$/.test(trimmed);
   const pipelineId = looksLikeId
-    ? pipelineNameOrId.trim()
-    : await resolvePipelineId(token, pipelineNameOrId);
+    ? trimmed
+    : await resolvePipelineId(token, trimmed);
 
   const now = Date.now();
   const since = now - days * 24 * 60 * 60 * 1000;
 
-  const deals: DealSearchResult[] = [];
+  const leads: LeadSearchResult[] = [];
   let after: string | undefined;
   do {
     const body = {
       filterGroups: [
         {
           filters: [
-            { propertyName: "pipeline", operator: "EQ", value: pipelineId },
-            { propertyName: "createdate", operator: "GTE", value: String(since) },
-            { propertyName: "createdate", operator: "LTE", value: String(now) },
+            { propertyName: PIPELINE_PROP, operator: "EQ", value: pipelineId },
+            { propertyName: CREATEDATE_PROP, operator: "GTE", value: String(since) },
+            { propertyName: CREATEDATE_PROP, operator: "LTE", value: String(now) },
           ],
         },
       ],
-      properties: ["createdate"],
-      sorts: [{ propertyName: "createdate", direction: "ASCENDING" }],
+      properties: [CREATEDATE_PROP],
+      sorts: [{ propertyName: CREATEDATE_PROP, direction: "ASCENDING" }],
       limit: 100,
       ...(after ? { after } : {}),
     };
 
-    const json = await fetchJson<DealSearchResponse>(
-      `${API}/crm/v3/objects/deals/search`,
+    const json = await fetchJson<LeadSearchResponse>(
+      `${API}/crm/v3/objects/${OBJECT_TYPE}/search`,
       {
         method: "POST",
         headers: {
@@ -96,13 +101,15 @@ export async function fetchHubSpotLeads(
       }
     );
 
-    deals.push(...json.results);
+    leads.push(...json.results);
     after = json.paging?.next?.after;
   } while (after);
 
   const byDay = new Map<string, number>();
-  for (const d of deals) {
-    const key = dayKey(d.properties.createdate);
+  for (const r of leads) {
+    const created = r.properties[CREATEDATE_PROP];
+    if (!created) continue;
+    const key = dayKey(created);
     byDay.set(key, (byDay.get(key) ?? 0) + 1);
   }
 
@@ -111,9 +118,9 @@ export async function fetchHubSpotLeads(
     .sort((a, b) => (a.day < b.day ? -1 : 1));
 
   return {
-    totalLeads: deals.length,
+    totalLeads: leads.length,
     daily,
-    pipelineName: looksLikeId ? `pipeline:${pipelineId}` : pipelineNameOrId,
+    pipelineName: looksLikeId ? `pipeline:${pipelineId}` : trimmed,
     pipelineId,
   };
 }

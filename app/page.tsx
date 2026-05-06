@@ -415,7 +415,7 @@ function AcquisitionCard({
     return (
       <section className="rounded-2xl border border-dashed border-psa-line bg-white px-6 py-8 text-center text-sm text-psa-muted">
         Configure as variáveis <code className="text-psa-ink">HUBSPOT_TOKEN</code> e{" "}
-        <code className="text-psa-ink">HUBSPOT_DEAL_PIPELINE</code> pra ver o CAC aqui.
+        <code className="text-psa-ink">HUBSPOT_LEAD_PIPELINE</code> pra ver o CAC aqui.
       </section>
     );
   }

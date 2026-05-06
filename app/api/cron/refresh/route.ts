@@ -81,11 +81,11 @@ async function runRefresh() {
   }
 
   const hubspotToken = process.env.HUBSPOT_TOKEN?.trim();
-  const hubspotPipeline = process.env.HUBSPOT_DEAL_PIPELINE?.trim();
+  const hubspotPipeline = process.env.HUBSPOT_LEAD_PIPELINE?.trim();
   if (!hubspotToken || !hubspotPipeline) {
     results.hubspot_b2c = {
       skipped: true,
-      reason: "HUBSPOT_TOKEN or HUBSPOT_DEAL_PIPELINE not set",
+      reason: "HUBSPOT_TOKEN or HUBSPOT_LEAD_PIPELINE not set",
     };
   } else try {
     const hub = await fetchHubSpotLeads(hubspotToken, hubspotPipeline, 90);
