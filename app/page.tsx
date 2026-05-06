@@ -15,8 +15,8 @@ import type { DashboardPayload } from "./api/data/route";
 import { formatDateBR, formatMoney } from "@/lib/format";
 
 const SOURCE_META = {
-  openai: { label: "OpenAI", color: "#10a37f" },
-  meta: { label: "Meta Ads", color: "#1877f2" },
+  openai: { label: "OpenAI", accent: "#FF640F", soft: "#FFE5D5", caption: "Inteligência Artificial" },
+  meta: { label: "Meta Ads", accent: "#053CAA", soft: "#E1E9FF", caption: "Mídia paga" },
 } as const;
 
 type SourceKey = keyof typeof SOURCE_META;
@@ -45,37 +45,85 @@ export default function DashboardPage() {
     load();
   }, []);
 
+  const lastUpdate = useMemo(() => {
+    if (!data) return null;
+    const stamps = Object.values(data.sources)
+      .map((s) => (s.capturedAt ? new Date(s.capturedAt).getTime() : 0))
+      .filter((t) => t > 0);
+    if (stamps.length === 0) return null;
+    return new Date(Math.max(...stamps));
+  }, [data]);
+
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10">
-      <header className="mb-8 flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Billing Dashboard</h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            Snapshots automáticos às 08:00, 12:00 e 16:00 (Brasília).
-          </p>
+    <div>
+      <header className="border-b border-psa-line bg-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-5">
+          <div className="flex items-center gap-4">
+            <PsaLogo />
+            <div className="hidden h-8 w-px bg-psa-line sm:block" />
+            <div className="hidden sm:block">
+              <h1 className="text-base font-semibold tracking-tight text-psa-ink">
+                Custos de IA &amp; Mídia
+              </h1>
+              <p className="text-xs text-psa-muted">Profissionaissa</p>
+            </div>
+          </div>
+          <button
+            onClick={load}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-full border border-psa-line bg-white px-4 py-1.5 text-sm font-medium text-psa-ink transition hover:border-psa-orange hover:text-psa-orange disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Atualizar
+          </button>
         </div>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-md border border-border bg-panel px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-          Atualizar
-        </button>
       </header>
 
-      {error && (
-        <div className="mb-6 rounded-md border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
-          Erro ao carregar dados: {error}
+      <main className="mx-auto max-w-6xl px-6 py-10">
+        <div className="mb-8 flex items-end justify-between">
+          <div>
+            <p className="text-sm font-medium uppercase tracking-[0.18em] text-psa-orange">
+              Painel financeiro
+            </p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight text-psa-ink sm:text-4xl">
+              Custos de IA &amp; Mídia
+            </h2>
+            <p className="mt-2 max-w-xl text-sm text-psa-muted">
+              Snapshots automáticos às <strong className="text-psa-ink">08:00</strong>,{" "}
+              <strong className="text-psa-ink">12:00</strong> e{" "}
+              <strong className="text-psa-ink">16:00</strong> (horário de Brasília).
+            </p>
+          </div>
+          {lastUpdate && (
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-wider text-psa-muted">Última atualização</p>
+              <p className="text-sm font-medium text-psa-ink">
+                {lastUpdate.toLocaleString("pt-BR", {
+                  dateStyle: "short",
+                  timeStyle: "short",
+                })}
+              </p>
+            </div>
+          )}
         </div>
-      )}
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {(Object.keys(SOURCE_META) as SourceKey[]).map((key) => (
-          <SourceCard key={key} source={key} data={data} />
-        ))}
-      </div>
-    </main>
+        {error && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            Erro ao carregar dados: {error}
+          </div>
+        )}
+
+        <div className="grid gap-6 md:grid-cols-2">
+          {(Object.keys(SOURCE_META) as SourceKey[]).map((key) => (
+            <SourceCard key={key} source={key} data={data} />
+          ))}
+        </div>
+
+        <footer className="mt-12 border-t border-psa-line pt-6 text-center text-xs text-psa-muted">
+          PSA · Aprender é o maior Show da Terra
+        </footer>
+      </main>
+    </div>
   );
 }
 
@@ -96,90 +144,104 @@ function SourceCard({
   );
 
   const currency = summary?.currency ?? "USD";
-  const updatedAt = summary?.capturedAt ? new Date(summary.capturedAt) : null;
-  const updatedLabel = updatedAt
-    ? updatedAt.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
-    : "—";
 
   return (
-    <section className="rounded-lg border border-border bg-panel p-5">
-      <header className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+    <section className="overflow-hidden rounded-2xl border border-psa-line bg-white shadow-sm">
+      <header className="flex items-center justify-between border-b border-psa-line px-6 py-4">
+        <div className="flex items-center gap-3">
           <span
-            className="inline-block h-2.5 w-2.5 rounded-full"
-            style={{ background: meta.color }}
-          />
-          <h2 className="text-lg font-medium">{meta.label}</h2>
-          {summary?.accountName && (
-            <span className="text-xs text-zinc-500">· {summary.accountName}</span>
-          )}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold"
+            style={{ background: meta.soft, color: meta.accent }}
+          >
+            {meta.label.slice(0, 1)}
+          </span>
+          <div>
+            <h3 className="text-base font-semibold text-psa-ink">{meta.label}</h3>
+            <p className="text-xs text-psa-muted">
+              {meta.caption}
+              {summary?.accountName ? ` · ${summary.accountName}` : ""}
+            </p>
+          </div>
         </div>
-        <span className="text-xs text-zinc-500">{updatedLabel}</span>
       </header>
 
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Hoje" value={summary?.spentToday} currency={currency} />
-        <Stat label="Mês atual" value={summary?.spentMonth} currency={currency} />
-        <Stat label="Acumulado" value={summary?.totalSpent} currency={currency} />
+      <div className="grid grid-cols-2 gap-px bg-psa-line sm:grid-cols-4">
+        <Stat label="Hoje" value={summary?.spentToday} currency={currency} accent={meta.accent} />
+        <Stat
+          label="Mês atual"
+          value={summary?.spentMonth}
+          currency={currency}
+          accent={meta.accent}
+        />
+        <Stat
+          label="Acumulado"
+          value={summary?.totalSpent}
+          currency={currency}
+          accent={meta.accent}
+        />
         {source === "meta" ? (
-          <Stat label="Saldo" value={summary?.balance} currency={currency} />
+          <Stat label="Saldo" value={summary?.balance} currency={currency} accent={meta.accent} />
         ) : (
-          <Stat label="Moeda" value={null} currency={currency} raw={currency} />
+          <Stat label="Moeda" raw={currency} accent={meta.accent} />
         )}
       </div>
 
-      <div className="h-44">
-        {chartData.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-zinc-500">
-            Sem dados ainda — aguarde o primeiro snapshot.
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id={`grad-${source}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={meta.color} stopOpacity={0.5} />
-                  <stop offset="100%" stopColor={meta.color} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid stroke="#1f1f24" vertical={false} />
-              <XAxis
-                dataKey="day"
-                tickFormatter={formatDateBR}
-                stroke="#52525b"
-                fontSize={11}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                stroke="#52525b"
-                fontSize={11}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) =>
-                  v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0)
-                }
-              />
-              <Tooltip
-                contentStyle={{
-                  background: "#111114",
-                  border: "1px solid #1f1f24",
-                  borderRadius: 6,
-                  fontSize: 12,
-                }}
-                labelFormatter={formatDateBR}
-                formatter={(value: number) => [formatMoney(value, currency), "Gasto"]}
-              />
-              <Area
-                type="monotone"
-                dataKey="amount"
-                stroke={meta.color}
-                strokeWidth={2}
-                fill={`url(#grad-${source})`}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
+      <div className="px-4 pb-5 pt-4">
+        <div className="h-44">
+          {chartData.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-sm text-psa-muted">
+              Sem dados ainda — aguarde o primeiro snapshot.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
+                <defs>
+                  <linearGradient id={`grad-${source}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={meta.accent} stopOpacity={0.35} />
+                    <stop offset="100%" stopColor={meta.accent} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="#EEF1F5" vertical={false} />
+                <XAxis
+                  dataKey="day"
+                  tickFormatter={formatDateBR}
+                  stroke="#9AA4B2"
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  stroke="#9AA4B2"
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) =>
+                    v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0)
+                  }
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "#FFFFFF",
+                    border: "1px solid #E6E9EF",
+                    borderRadius: 10,
+                    fontSize: 12,
+                    boxShadow: "0 4px 16px rgba(11,19,32,0.08)",
+                  }}
+                  labelStyle={{ color: "#0B1320", fontWeight: 600 }}
+                  labelFormatter={formatDateBR}
+                  formatter={(value: number) => [formatMoney(value, currency), "Gasto"]}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="amount"
+                  stroke={meta.accent}
+                  strokeWidth={2.5}
+                  fill={`url(#grad-${source})`}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -190,18 +252,42 @@ function Stat({
   value,
   currency,
   raw,
+  accent,
 }: {
   label: string;
-  value: number | null | undefined;
-  currency: string;
+  value?: number | null;
+  currency?: string;
   raw?: string;
+  accent: string;
 }) {
   const display =
-    raw !== undefined ? raw : value == null ? "—" : formatMoney(value, currency);
+    raw !== undefined
+      ? raw
+      : value == null || currency == null
+        ? "—"
+        : formatMoney(value, currency);
   return (
-    <div>
-      <div className="text-xs uppercase tracking-wide text-zinc-500">{label}</div>
-      <div className="mt-0.5 text-lg font-semibold tabular-nums">{display}</div>
+    <div className="bg-white px-4 py-4">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-psa-muted">
+        {label}
+      </div>
+      <div
+        className="mt-1 text-xl font-semibold tabular-nums"
+        style={{ color: accent === "#FF640F" || raw ? "#0B1320" : "#0B1320" }}
+      >
+        {display}
+      </div>
+    </div>
+  );
+}
+
+function PsaLogo() {
+  return (
+    <div className="flex items-center" aria-label="PSA">
+      <span className="font-display text-2xl font-extrabold tracking-tight text-psa-ink">
+        PSA
+      </span>
+      <span className="ml-0.5 text-2xl font-extrabold leading-none text-psa-orange">!</span>
     </div>
   );
 }

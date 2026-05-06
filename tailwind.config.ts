@@ -5,12 +5,21 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg: "#0a0a0b",
-        panel: "#111114",
-        border: "#1f1f24",
-        muted: "#6b7280",
-        accent: "#10a37f",
-        meta: "#1877f2",
+        psa: {
+          orange: "#FF640F",
+          "orange-soft": "#FFE5D5",
+          blue: "#053CAA",
+          "blue-soft": "#E1E9FF",
+          ink: "#0B1320",
+          muted: "#5B6679",
+          line: "#E6E9EF",
+          surface: "#FFFFFF",
+          bg: "#F7F8FB",
+        },
+      },
+      fontFamily: {
+        sans: ['"Inter"', "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ['"Inter"', "ui-sans-serif", "system-ui", "sans-serif"],
       },
     },
   },
