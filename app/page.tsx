@@ -27,7 +27,7 @@ import {
 
 const SOURCE_META = {
   openai: { label: "OpenAI", accent: "#FF640F", soft: "#FFE5D5", caption: "Inteligência Artificial" },
-  meta: { label: "Meta Ads", accent: "#053CAA", soft: "#E1E9FF", caption: "Mídia paga" },
+  meta: { label: "WhatsApp", accent: "#053CAA", soft: "#E1E9FF", caption: "Custo de disparo" },
 } as const;
 
 type SourceKey = keyof typeof SOURCE_META;
@@ -448,7 +448,7 @@ function AcquisitionCard({
           <div>
             <h3 className="text-base font-semibold text-psa-ink">Aquisição B2C</h3>
             <p className="text-xs text-psa-muted">
-              CAC = (Gasto OpenAI + Gasto Meta Ads) ÷ Leads qualificados ·{" "}
+              CAC = (Gasto OpenAI + Custo WhatsApp) ÷ Leads qualificados ·{" "}
               <span className="text-psa-ink">{pipelineLabel}</span>
               {currencyMismatch && (
                 <span className="ml-2 inline-flex items-center rounded bg-psa-orange-soft px-1.5 py-0.5 text-[10px] font-semibold text-psa-orange">
@@ -475,7 +475,7 @@ function AcquisitionCard({
           currency={openaiCurrency}
         />
         <Stat
-          label="Gasto Mídia"
+          label="Custo WhatsApp"
           value={metaSpend > 0 ? metaSpend : null}
           currency={metaCurrency ?? reportCurrency}
         />
