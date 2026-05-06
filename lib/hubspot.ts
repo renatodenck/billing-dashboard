@@ -8,6 +8,9 @@ type Pipeline = { id: string; label: string; stages: PipelineStage[] };
 type PipelineStage = { id: string; label: string };
 type PipelinesResponse = { results: Pipeline[] };
 
+type LeadProperty = { name: string; label: string };
+type PropertiesResponse = { results: LeadProperty[] };
+
 type LeadSearchResult = {
   id: string;
   properties: Record<string, string | null>;
@@ -46,11 +49,17 @@ async function fetchJson<T>(url: string, init: RequestInit, attempt = 0): Promis
   return (await res.json()) as T;
 }
 
-async function resolvePipelineAndStage(
+async function resolvePipelineStageAndProperty(
   token: string,
   pipelineNameOrId: string,
   stageName: string
-): Promise<{ pipelineId: string; pipelineLabel: string; stageId: string; stageLabel: string }> {
+): Promise<{
+  pipelineId: string;
+  pipelineLabel: string;
+  stageId: string;
+  stageLabel: string;
+  dateEnteredProperty: string;
+}> {
   const json = await fetchJson<PipelinesResponse>(`${API}/crm/v3/pipelines/${OBJECT_TYPE}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -75,11 +84,35 @@ async function resolvePipelineAndStage(
     );
   }
 
+  // Property name format depends on stage ID type. Numeric IDs produce hs_v2_date_entered_<id>,
+  // but slug-based IDs add an opaque suffix (e.g. hs_v2_date_entered_qualified_stage_id_233247981).
+  // Resolving by label avoids the guesswork.
+  const stageIdIsNumeric = /^[0-9]+$/.test(stage.id);
+  let dateEnteredProperty = `hs_v2_date_entered_${stage.id}`;
+  if (!stageIdIsNumeric) {
+    const propsJson = await fetchJson<PropertiesResponse>(
+      `${API}/crm/v3/properties/${OBJECT_TYPE}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const expected = `Date entered "${stage.label} (${pipeline.label})"`;
+    const expectedNorm = norm(expected);
+    const match = propsJson.results.find(
+      (p) => p.name.startsWith("hs_v2_date_entered_") && norm(p.label) === expectedNorm
+    );
+    if (!match) {
+      throw new Error(
+        `HubSpot date_entered property not found for stage "${stage.label}" in pipeline "${pipeline.label}".`
+      );
+    }
+    dateEnteredProperty = match.name;
+  }
+
   return {
     pipelineId: pipeline.id,
     pipelineLabel: pipeline.label,
     stageId: stage.id,
     stageLabel: stage.label,
+    dateEnteredProperty,
   };
 }
 
@@ -89,13 +122,10 @@ export async function fetchHubSpotLeads(
   stageName: string,
   days = 90
 ): Promise<HubSpotLeads> {
-  const { pipelineId, pipelineLabel, stageId, stageLabel } = await resolvePipelineAndStage(
-    token,
-    pipelineNameOrId,
-    stageName
-  );
+  const { pipelineId, pipelineLabel, stageId, stageLabel, dateEnteredProperty } =
+    await resolvePipelineStageAndProperty(token, pipelineNameOrId, stageName);
 
-  const stageDateProp = `hs_v2_date_entered_${stageId}`;
+  const stageDateProp = dateEnteredProperty;
   const now = Date.now();
   const since = now - days * 24 * 60 * 60 * 1000;
 
