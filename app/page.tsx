@@ -558,12 +558,12 @@ function Stat({
         ? "—"
         : formatMoney(value, currency);
   return (
-    <div className="bg-white px-4 py-4">
+    <div className="bg-white px-3 py-4">
       <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-psa-muted">
         {label}
       </div>
       <div
-        className="mt-1 text-xl font-semibold tabular-nums"
+        className="mt-1 whitespace-nowrap text-base font-semibold leading-tight tracking-tight tabular-nums sm:text-lg"
         style={{ color: highlight && accent ? accent : "#0B1320" }}
       >
         {display}
