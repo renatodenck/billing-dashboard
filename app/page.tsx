@@ -435,8 +435,9 @@ function AcquisitionCard({
   if (!hubspotConfigured) {
     return (
       <section className="rounded-2xl border border-dashed border-psa-line bg-white px-6 py-8 text-center text-sm text-psa-muted">
-        Configure as variáveis <code className="text-psa-ink">HUBSPOT_TOKEN</code> e{" "}
-        <code className="text-psa-ink">HUBSPOT_LEAD_PIPELINE</code> pra ver o CAC aqui.
+        Configure as variáveis <code className="text-psa-ink">HUBSPOT_TOKEN</code>,{" "}
+        <code className="text-psa-ink">HUBSPOT_LEAD_PIPELINE</code> e{" "}
+        <code className="text-psa-ink">HUBSPOT_LEAD_STAGE</code> pra ver o CAC aqui.
       </section>
     );
   }
@@ -451,7 +452,7 @@ function AcquisitionCard({
           <div>
             <h3 className="text-base font-semibold text-psa-ink">Aquisição B2C</h3>
             <p className="text-xs text-psa-muted">
-              CAC = (Gasto OpenAI + Gasto Meta Ads) ÷ Leads no HubSpot · Pipeline:{" "}
+              CAC = (Gasto OpenAI + Gasto Meta Ads) ÷ Leads qualificados ·{" "}
               <span className="text-psa-ink">{pipelineLabel}</span>
               {currencyMismatch && (
                 <span className="ml-2 inline-flex items-center rounded bg-psa-orange-soft px-1.5 py-0.5 text-[10px] font-semibold text-psa-orange">
@@ -471,7 +472,7 @@ function AcquisitionCard({
           highlight
           accent="#FF640F"
         />
-        <Stat label="Leads novos" raw={totalLeads.toLocaleString("pt-BR")} />
+        <Stat label="Leads qualificados" raw={totalLeads.toLocaleString("pt-BR")} />
         <Stat
           label={`Gasto IA${openaiCurrency !== reportCurrency ? ` (${openaiCurrency})` : ""}`}
           value={openaiSpend > 0 ? openaiSpend : null}
@@ -488,7 +489,7 @@ function AcquisitionCard({
         <div className="h-44">
           {filteredLeads.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-psa-muted">
-              Sem leads no período selecionado.
+              Sem leads qualificados no período selecionado.
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
@@ -523,7 +524,7 @@ function AcquisitionCard({
                   }}
                   labelStyle={{ color: "#0B1320", fontWeight: 600 }}
                   labelFormatter={formatDateBR}
-                  formatter={(value: number) => [`${value} lead${value === 1 ? "" : "s"}`, "Novos"]}
+                  formatter={(value: number) => [`${value} lead${value === 1 ? "" : "s"}`, "Qualificados"]}
                 />
                 <Bar dataKey="amount" fill="#FF640F" radius={[4, 4, 0, 0]} />
               </BarChart>

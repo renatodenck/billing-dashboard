@@ -84,23 +84,31 @@ async function runRefresh() {
 
   const hubspotToken = process.env.HUBSPOT_TOKEN?.trim();
   const hubspotPipeline = process.env.HUBSPOT_LEAD_PIPELINE?.trim();
-  if (!hubspotToken || !hubspotPipeline) {
+  const hubspotStage = process.env.HUBSPOT_LEAD_STAGE?.trim();
+  if (!hubspotToken || !hubspotPipeline || !hubspotStage) {
     results.hubspot_b2c = {
       skipped: true,
-      reason: "HUBSPOT_TOKEN or HUBSPOT_LEAD_PIPELINE not set",
+      reason: "HUBSPOT_TOKEN, HUBSPOT_LEAD_PIPELINE or HUBSPOT_LEAD_STAGE not set",
     };
   } else try {
-    const hub = await fetchHubSpotLeads(hubspotToken, hubspotPipeline, 90);
+    const hub = await fetchHubSpotLeads(hubspotToken, hubspotPipeline, hubspotStage, 90);
     await db.insert(snapshots).values({
       source: "hubspot_b2c",
       currency: "LEADS",
       totalSpent: hub.totalLeads.toFixed(4),
-      raw: { daily: hub.daily, pipelineName: hub.pipelineName, pipelineId: hub.pipelineId },
+      raw: {
+        daily: hub.daily,
+        pipelineName: hub.pipelineName,
+        pipelineId: hub.pipelineId,
+        stageName: hub.stageName,
+        stageId: hub.stageId,
+      },
     });
     await upsertDaily("hubspot_b2c", "LEADS", hub.daily);
     results.hubspot_b2c = {
       totalLeads: hub.totalLeads,
       pipelineName: hub.pipelineName,
+      stageName: hub.stageName,
       days: hub.daily.length,
     };
   } catch (err) {

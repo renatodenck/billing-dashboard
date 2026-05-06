@@ -35,9 +35,13 @@ export async function GET() {
 
     const raw =
       latest?.raw && typeof latest.raw === "object"
-        ? (latest.raw as { accountName?: string; pipelineName?: string })
+        ? (latest.raw as { accountName?: string; pipelineName?: string; stageName?: string })
         : null;
-    const accountName = raw?.accountName ?? raw?.pipelineName ?? null;
+    const accountName =
+      raw?.accountName ??
+      (raw?.pipelineName && raw?.stageName
+        ? `${raw.pipelineName} · ${raw.stageName}`
+        : (raw?.pipelineName ?? null));
 
     result.sources[source] = latest
       ? {
