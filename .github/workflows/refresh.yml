@@ -1,0 +1,21 @@
+name: Refresh billing snapshot
+
+on:
+  schedule:
+    # 11:00, 15:00, 19:00 UTC = 08:00, 12:00, 16:00 BRT (UTC-3)
+    - cron: "0 11,15,19 * * *"
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger refresh endpoint
+        run: |
+          curl --fail-with-body -sS \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${DASHBOARD_URL}/api/cron/refresh"
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}

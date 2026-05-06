@@ -54,6 +54,14 @@ curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/refr
 
 ## Cron schedule
 
-`vercel.json` está configurado pra rodar às `0 11,15,19 * * *` UTC = 08:00, 12:00, 16:00 horário de Brasília (UTC-3).
+O agendamento é feito via **GitHub Actions** (em `.github/workflows/refresh.yml`), porque o plano Hobby da Vercel limita cron a 1x/dia.
+
+Schedule: `0 11,15,19 * * *` UTC = 08:00, 12:00, 16:00 horário de Brasília (UTC-3).
+
+Secrets necessários no repo GitHub (Settings → Secrets and variables → Actions):
+- `DASHBOARD_URL`: URL pública da Vercel (ex: `https://billing-dashboard-xxxx.vercel.app`)
+- `CRON_SECRET`: mesma string usada no env var da Vercel
+
+Pode disparar manualmente: aba **Actions** do repo → workflow "Refresh billing snapshot" → **Run workflow**.
 
 Se o horário de verão voltar, ajustar para `0 10,14,18`.
