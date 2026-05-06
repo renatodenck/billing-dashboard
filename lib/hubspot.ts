@@ -24,8 +24,16 @@ export type HubSpotLeads = {
   pipelineId: string;
 };
 
-async function fetchJson<T>(url: string, init: RequestInit): Promise<T> {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function fetchJson<T>(url: string, init: RequestInit, attempt = 0): Promise<T> {
   const res = await fetch(url, { ...init, cache: "no-store" });
+  if (res.status === 429 && attempt < 5) {
+    const retryAfter = Number(res.headers.get("retry-after"));
+    const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1000 * (attempt + 1);
+    await sleep(waitMs);
+    return fetchJson<T>(url, init, attempt + 1);
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`HubSpot API ${res.status}: ${text}`);
@@ -103,6 +111,7 @@ export async function fetchHubSpotLeads(
 
     leads.push(...json.results);
     after = json.paging?.next?.after;
+    if (after) await sleep(120);
   } while (after);
 
   const byDay = new Map<string, number>();
