@@ -27,7 +27,8 @@ import {
 
 const SOURCE_META = {
   openai: { label: "OpenAI", accent: "#FF640F", soft: "#FFE5D5", caption: "Inteligência Artificial" },
-  meta: { label: "WhatsApp", accent: "#053CAA", soft: "#E1E9FF", caption: "Custo de disparo" },
+  meta: { label: "WhatsApp B2C", accent: "#053CAA", soft: "#E1E9FF", caption: "Custo de disparo" },
+  meta_b2b: { label: "WhatsApp B2B", accent: "#1E3A8A", soft: "#DBEAFE", caption: "Custo de disparo" },
 } as const;
 
 type SourceKey = keyof typeof SOURCE_META;
@@ -162,14 +163,18 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="grid gap-6 md:grid-cols-2">
-          {(Object.keys(SOURCE_META) as SourceKey[]).map((key) => (
-            <SourceCard key={key} source={key} data={data} range={range} />
-          ))}
+        <div className="mb-6">
+          <SourceCard source="openai" data={data} range={range} />
         </div>
 
-        <div className="mt-6">
-          <AcquisitionCard data={data} range={range} />
+        <div className="mb-6 grid gap-6 md:grid-cols-2">
+          <SourceCard source="meta" data={data} range={range} />
+          <SourceCard source="meta_b2b" data={data} range={range} />
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          <AcquisitionCard variant="b2c" data={data} range={range} />
+          <AcquisitionCard variant="b2b" data={data} range={range} />
         </div>
 
         <footer className="mt-12 border-t border-psa-line pt-6 text-center text-xs text-psa-muted">
@@ -388,52 +393,61 @@ function SourceCard({
 function AcquisitionCard({
   data,
   range,
+  variant,
 }: {
   data: DashboardPayload | null;
   range: DateRange;
+  variant: "b2c" | "b2b";
 }) {
+  const metaSourceKey = variant === "b2c" ? "meta" : "meta_b2b";
+  const leadsSourceKey = variant === "b2c" ? "hubspot_b2c" : "hubspot_b2b";
+
   const openaiDaily = data?.daily.openai ?? [];
-  const metaDaily = data?.daily.meta ?? [];
-  const leadsDaily = data?.daily.hubspot_b2c ?? [];
-  const hubspotSource = data?.sources.hubspot_b2c;
+  const metaDaily = data?.daily[metaSourceKey] ?? [];
+  const leadsDaily = data?.daily[leadsSourceKey] ?? [];
+  const hubspotSource = data?.sources[leadsSourceKey];
 
   const filteredOpenai = useMemo(() => filterDaily(openaiDaily, range), [openaiDaily, range]);
   const filteredMeta = useMemo(() => filterDaily(metaDaily, range), [metaDaily, range]);
   const filteredLeads = useMemo(() => filterDaily(leadsDaily, range), [leadsDaily, range]);
 
-  const openaiSpend = filteredOpenai.reduce((s, d) => s + d.amount, 0);
+  // OpenAI is split 50/50 between B2C and B2B CPO (no project breakdown today).
+  const openaiSpend = filteredOpenai.reduce((s, d) => s + d.amount, 0) / 2;
   const metaSpend = filteredMeta.reduce((s, d) => s + d.amount, 0);
   const totalLeads = filteredLeads.reduce((s, d) => s + d.amount, 0);
 
   const openaiCurrency = data?.sources.openai?.currency ?? "USD";
-  const metaCurrency = data?.sources.meta?.currency ?? null;
+  const metaCurrency = data?.sources[metaSourceKey]?.currency ?? null;
 
   const usdToBrl = Number(process.env.NEXT_PUBLIC_USD_TO_BRL ?? "5.0") || 5.0;
 
-  // Choose a single currency for the combined CAC.
-  // If Meta is configured and not USD, convert OpenAI USD into Meta's currency (assume BRL).
-  // Otherwise keep everything in OpenAI's currency.
-  const reportCurrency = metaCurrency && metaCurrency !== openaiCurrency ? metaCurrency : openaiCurrency;
+  // Choose a single currency for the combined CPO.
+  const reportCurrency =
+    metaCurrency && metaCurrency !== openaiCurrency ? metaCurrency : openaiCurrency;
   const openaiInReport =
     openaiCurrency === reportCurrency
       ? openaiSpend
       : openaiCurrency === "USD" && reportCurrency === "BRL"
         ? openaiSpend * usdToBrl
-        : openaiSpend; // fallback: assume same magnitude
+        : openaiSpend;
   const totalSpend = openaiInReport + metaSpend;
-  const cac = totalLeads > 0 ? totalSpend / totalLeads : null;
+  const cpo = totalLeads > 0 ? totalSpend / totalLeads : null;
 
   const pipelineLabel = hubspotSource?.accountName ?? "—";
   const hubspotConfigured = leadsDaily.length > 0 || hubspotSource?.capturedAt != null;
-  const currencyMismatch =
-    metaCurrency != null && metaCurrency !== openaiCurrency;
+  const currencyMismatch = metaCurrency != null && metaCurrency !== openaiCurrency;
+
+  const title = variant === "b2c" ? "Qualificação B2C" : "Qualificação B2B";
+  const accentColor = variant === "b2c" ? "#FF640F" : "#053CAA";
+  const accentSoft = variant === "b2c" ? "#FFE5D5" : "#E1E9FF";
 
   if (!hubspotConfigured) {
+    const hubspotEnv = variant === "b2c" ? "HUBSPOT_LEAD_PIPELINE" : "HUBSPOT_LEAD_PIPELINE_B2B";
+    const stageEnv = variant === "b2c" ? "HUBSPOT_LEAD_STAGE" : "HUBSPOT_LEAD_STAGE_B2B";
     return (
       <section className="rounded-2xl border border-dashed border-psa-line bg-white px-6 py-8 text-center text-sm text-psa-muted">
-        Configure as variáveis <code className="text-psa-ink">HUBSPOT_TOKEN</code>,{" "}
-        <code className="text-psa-ink">HUBSPOT_LEAD_PIPELINE</code> e{" "}
-        <code className="text-psa-ink">HUBSPOT_LEAD_STAGE</code> pra ver o CAC aqui.
+        Configure <code className="text-psa-ink">{hubspotEnv}</code> e{" "}
+        <code className="text-psa-ink">{stageEnv}</code> pra ver o CPO {variant.toUpperCase()} aqui.
       </section>
     );
   }
@@ -442,13 +456,16 @@ function AcquisitionCard({
     <section className="overflow-hidden rounded-2xl border border-psa-line bg-white shadow-sm">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-psa-line px-6 py-4">
         <div className="flex items-center gap-3">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-psa-orange-soft text-sm font-bold text-psa-orange">
+          <span
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold"
+            style={{ background: accentSoft, color: accentColor }}
+          >
             ⚡
           </span>
           <div>
-            <h3 className="text-base font-semibold text-psa-ink">Qualificação B2C</h3>
+            <h3 className="text-base font-semibold text-psa-ink">{title}</h3>
             <p className="text-xs text-psa-muted">
-              CPO = (Gasto OpenAI + Custo WhatsApp) ÷ Leads qualificados ·{" "}
+              CPO = (½ OpenAI + WhatsApp {variant.toUpperCase()}) ÷ Leads qualificados ·{" "}
               <span className="text-psa-ink">{pipelineLabel}</span>
               {currencyMismatch && (
                 <span className="ml-2 inline-flex items-center rounded bg-psa-orange-soft px-1.5 py-0.5 text-[10px] font-semibold text-psa-orange">
@@ -463,14 +480,14 @@ function AcquisitionCard({
       <div className="grid grid-cols-2 gap-px bg-psa-line sm:grid-cols-4">
         <Stat
           label="CPO do período"
-          value={cac}
+          value={cpo}
           currency={reportCurrency}
           highlight
-          accent="#FF640F"
+          accent={accentColor}
         />
         <Stat label="Leads qualificados" raw={totalLeads.toLocaleString("pt-BR")} />
         <Stat
-          label={`Gasto IA${openaiCurrency !== reportCurrency ? ` (${openaiCurrency})` : ""}`}
+          label={`½ Gasto IA${openaiCurrency !== reportCurrency ? ` (${openaiCurrency})` : ""}`}
           value={openaiSpend > 0 ? openaiSpend : null}
           currency={openaiCurrency}
         />

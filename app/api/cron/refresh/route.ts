@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { sql, gt } from "drizzle-orm";
 import { db } from "@/db";
 import { snapshots, dailySpend } from "@/db/schema";
 import { fetchOpenAIUsage } from "@/lib/openai";
 import { fetchMetaUsage } from "@/lib/meta";
 import { fetchHubSpotLeads } from "@/lib/hubspot";
 import { brDay } from "@/lib/format";
-import { gt } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -32,6 +31,7 @@ async function runRefresh() {
   const results: Record<string, unknown> = {};
   const errors: Record<string, string> = {};
 
+  // ---------- OpenAI (single source, split 50/50 in UI for the two CPOs) ----------
   try {
     const openai = await fetchOpenAIUsage(process.env.OPENAI_ADMIN_KEY!, 60);
     await db.insert(snapshots).values({
@@ -46,75 +46,49 @@ async function runRefresh() {
     results.openai = {
       currency: openai.currency,
       totalSpent: openai.totalSpent,
-      spentToday: openai.spentToday,
-      spentMonth: openai.spentMonth,
       days: openai.daily.length,
     };
   } catch (err) {
     errors.openai = err instanceof Error ? err.message : String(err);
   }
 
-  const metaToken = process.env.META_ACCESS_TOKEN?.trim();
-  const metaWabaId =
-    process.env.META_WABA_ID?.trim() ?? process.env.META_AD_ACCOUNT_ID?.trim();
-  if (!metaToken || !metaWabaId) {
-    results.meta = { skipped: true, reason: "META_ACCESS_TOKEN or META_WABA_ID not set" };
-  } else try {
-    const meta = await fetchMetaUsage(metaToken, metaWabaId, 60);
-    await db.insert(snapshots).values({
-      source: "meta",
-      currency: meta.currency,
-      totalSpent: meta.totalSpent.toFixed(4),
-      spentToday: meta.spentToday.toFixed(4),
-      spentMonth: meta.spentMonth.toFixed(4),
-      balance: meta.balance != null ? meta.balance.toFixed(4) : null,
-      raw: { daily: meta.daily, accountName: meta.accountName },
-    });
-    await upsertDaily("meta", meta.currency, meta.daily);
-    results.meta = {
-      currency: meta.currency,
-      totalSpent: meta.totalSpent,
-      balance: meta.balance,
-      spentToday: meta.spentToday,
-      spentMonth: meta.spentMonth,
-      days: meta.daily.length,
-    };
-  } catch (err) {
-    errors.meta = err instanceof Error ? err.message : String(err);
-  }
+  // ---------- WhatsApp B2C (legacy "meta" source name) ----------
+  await captureMeta(
+    "meta",
+    process.env.META_ACCESS_TOKEN?.trim(),
+    process.env.META_WABA_ID?.trim() ?? process.env.META_AD_ACCOUNT_ID?.trim(),
+    results,
+    errors
+  );
 
-  const hubspotToken = process.env.HUBSPOT_TOKEN?.trim();
-  const hubspotPipeline = process.env.HUBSPOT_LEAD_PIPELINE?.trim();
-  const hubspotStage = process.env.HUBSPOT_LEAD_STAGE?.trim();
-  if (!hubspotToken || !hubspotPipeline || !hubspotStage) {
-    results.hubspot_b2c = {
-      skipped: true,
-      reason: "HUBSPOT_TOKEN, HUBSPOT_LEAD_PIPELINE or HUBSPOT_LEAD_STAGE not set",
-    };
-  } else try {
-    const hub = await fetchHubSpotLeads(hubspotToken, hubspotPipeline, hubspotStage, 90);
-    await db.insert(snapshots).values({
-      source: "hubspot_b2c",
-      currency: "LEADS",
-      totalSpent: hub.totalLeads.toFixed(4),
-      raw: {
-        daily: hub.daily,
-        pipelineName: hub.pipelineName,
-        pipelineId: hub.pipelineId,
-        stageName: hub.stageName,
-        stageId: hub.stageId,
-      },
-    });
-    await upsertDaily("hubspot_b2c", "LEADS", hub.daily);
-    results.hubspot_b2c = {
-      totalLeads: hub.totalLeads,
-      pipelineName: hub.pipelineName,
-      stageName: hub.stageName,
-      days: hub.daily.length,
-    };
-  } catch (err) {
-    errors.hubspot_b2c = err instanceof Error ? err.message : String(err);
-  }
+  // ---------- WhatsApp B2B ----------
+  await captureMeta(
+    "meta_b2b",
+    process.env.META_ACCESS_TOKEN_B2B?.trim(),
+    process.env.META_WABA_B2B_ID?.trim(),
+    results,
+    errors
+  );
+
+  // ---------- HubSpot B2C ----------
+  await captureHubSpot(
+    "hubspot_b2c",
+    process.env.HUBSPOT_TOKEN?.trim(),
+    process.env.HUBSPOT_LEAD_PIPELINE?.trim(),
+    process.env.HUBSPOT_LEAD_STAGE?.trim(),
+    results,
+    errors
+  );
+
+  // ---------- HubSpot B2B ----------
+  await captureHubSpot(
+    "hubspot_b2b",
+    process.env.HUBSPOT_TOKEN?.trim(),
+    process.env.HUBSPOT_LEAD_PIPELINE_B2B?.trim(),
+    process.env.HUBSPOT_LEAD_STAGE_B2B?.trim(),
+    results,
+    errors
+  );
 
   // Defensive cleanup: remove any future-dated rows (leftovers from when buckets were UTC)
   try {
@@ -126,6 +100,83 @@ async function runRefresh() {
 
   const status = Object.keys(errors).length === 0 ? 200 : 207;
   return NextResponse.json({ ok: status === 200, results, errors }, { status });
+}
+
+async function captureMeta(
+  source: string,
+  token: string | undefined,
+  wabaId: string | undefined,
+  results: Record<string, unknown>,
+  errors: Record<string, string>
+): Promise<void> {
+  if (!token || !wabaId) {
+    results[source] = { skipped: true, reason: `Token or WABA ID not set for ${source}` };
+    return;
+  }
+  try {
+    const meta = await fetchMetaUsage(token, wabaId, 60);
+    await db.insert(snapshots).values({
+      source,
+      currency: meta.currency,
+      totalSpent: meta.totalSpent.toFixed(4),
+      spentToday: meta.spentToday.toFixed(4),
+      spentMonth: meta.spentMonth.toFixed(4),
+      balance: meta.balance != null ? meta.balance.toFixed(4) : null,
+      raw: { daily: meta.daily, accountName: meta.accountName },
+    });
+    await upsertDaily(source, meta.currency, meta.daily);
+    results[source] = {
+      currency: meta.currency,
+      totalSpent: meta.totalSpent,
+      spentToday: meta.spentToday,
+      spentMonth: meta.spentMonth,
+      days: meta.daily.length,
+      accountName: meta.accountName,
+    };
+  } catch (err) {
+    errors[source] = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function captureHubSpot(
+  source: string,
+  token: string | undefined,
+  pipeline: string | undefined,
+  stage: string | undefined,
+  results: Record<string, unknown>,
+  errors: Record<string, string>
+): Promise<void> {
+  if (!token || !pipeline || !stage) {
+    results[source] = {
+      skipped: true,
+      reason: `Token, pipeline or stage not set for ${source}`,
+    };
+    return;
+  }
+  try {
+    const hub = await fetchHubSpotLeads(token, pipeline, stage, 90);
+    await db.insert(snapshots).values({
+      source,
+      currency: "LEADS",
+      totalSpent: hub.totalLeads.toFixed(4),
+      raw: {
+        daily: hub.daily,
+        pipelineName: hub.pipelineName,
+        pipelineId: hub.pipelineId,
+        stageName: hub.stageName,
+        stageId: hub.stageId,
+      },
+    });
+    await upsertDaily(source, "LEADS", hub.daily);
+    results[source] = {
+      totalLeads: hub.totalLeads,
+      pipelineName: hub.pipelineName,
+      stageName: hub.stageName,
+      days: hub.daily.length,
+    };
+  } catch (err) {
+    errors[source] = err instanceof Error ? err.message : String(err);
+  }
 }
 
 async function upsertDaily(
