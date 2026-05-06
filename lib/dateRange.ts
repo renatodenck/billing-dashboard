@@ -1,3 +1,5 @@
+import { brDay } from "./format";
+
 export type RangePreset =
   | "today"
   | "7d"
@@ -21,18 +23,18 @@ export const PRESET_LABELS: Record<RangePreset, string> = {
   custom: "Personalizado",
 };
 
-const isoDay = (d: Date) =>
-  new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
-    .toISOString()
-    .slice(0, 10);
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
 
 export function presetToRange(
   preset: RangePreset,
   custom: DateRange,
   daily: Array<{ day: string }>
 ): DateRange {
-  const today = new Date();
-  const todayStr = isoDay(today);
+  const todayStr = brDay();
 
   if (preset === "custom") return custom;
 
@@ -45,24 +47,29 @@ export function presetToRange(
   }
 
   if (preset === "thisMonth") {
-    const since = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
-    return { since: isoDay(since), until: todayStr };
+    const [y, m] = todayStr.split("-");
+    return { since: `${y}-${m}-01`, until: todayStr };
   }
 
   if (preset === "lastMonth") {
-    const firstThis = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
-    const lastEnd = new Date(firstThis);
-    lastEnd.setUTCDate(0);
-    const lastStart = new Date(
-      Date.UTC(lastEnd.getUTCFullYear(), lastEnd.getUTCMonth(), 1)
-    );
-    return { since: isoDay(lastStart), until: isoDay(lastEnd) };
+    const [yStr, mStr] = todayStr.split("-");
+    let y = Number(yStr);
+    let m = Number(mStr) - 1;
+    if (m < 1) {
+      m = 12;
+      y -= 1;
+    }
+    const mPad = pad(m);
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return {
+      since: `${y}-${mPad}-01`,
+      until: `${y}-${mPad}-${pad(lastDay)}`,
+    };
   }
 
   const days = preset === "7d" ? 7 : preset === "30d" ? 30 : 60;
-  const since = new Date(today);
-  since.setUTCDate(since.getUTCDate() - (days - 1));
-  return { since: isoDay(since), until: todayStr };
+  const since = brDay(Date.now() - (days - 1) * DAY_MS);
+  return { since, until: todayStr };
 }
 
 export function filterDaily<T extends { day: string }>(

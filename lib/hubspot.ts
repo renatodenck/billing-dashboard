@@ -1,3 +1,5 @@
+import { brDay } from "./format";
+
 const API = "https://api.hubapi.com";
 const OBJECT_TYPE = "leads";
 const CREATEDATE_PROP = "hs_createdate";
@@ -59,9 +61,7 @@ async function resolvePipelineId(token: string, pipelineName: string): Promise<s
 }
 
 function dayKey(input: string | number): string {
-  return new Date(typeof input === "string" ? input : Number(input))
-    .toISOString()
-    .slice(0, 10);
+  return brDay(typeof input === "string" ? input : Number(input));
 }
 
 export async function fetchHubSpotLeads(
