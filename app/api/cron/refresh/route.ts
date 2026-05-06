@@ -55,11 +55,12 @@ async function runRefresh() {
   }
 
   const metaToken = process.env.META_ACCESS_TOKEN?.trim();
-  const metaAccountId = process.env.META_AD_ACCOUNT_ID?.trim();
-  if (!metaToken || !metaAccountId) {
-    results.meta = { skipped: true, reason: "META_ACCESS_TOKEN or META_AD_ACCOUNT_ID not set" };
+  const metaWabaId =
+    process.env.META_WABA_ID?.trim() ?? process.env.META_AD_ACCOUNT_ID?.trim();
+  if (!metaToken || !metaWabaId) {
+    results.meta = { skipped: true, reason: "META_ACCESS_TOKEN or META_WABA_ID not set" };
   } else try {
-    const meta = await fetchMetaUsage(metaToken, metaAccountId, 60);
+    const meta = await fetchMetaUsage(metaToken, metaWabaId, 60);
     await db.insert(snapshots).values({
       source: "meta",
       currency: meta.currency,

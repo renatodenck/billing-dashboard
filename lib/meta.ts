@@ -1,4 +1,6 @@
-const GRAPH = "https://graph.facebook.com/v23.0";
+import { brDay } from "./format";
+
+const GRAPH = "https://graph.facebook.com/v22.0";
 
 export type MetaUsage = {
   currency: string;
@@ -10,38 +12,23 @@ export type MetaUsage = {
   accountName: string;
 };
 
-type AdAccount = {
+type WabaInfo = {
   name: string;
   currency: string;
-  amount_spent: string;
-  balance: string;
 };
 
-type Insight = {
-  spend: string;
-  date_start: string;
-  date_stop: string;
+type PricingDataPoint = {
+  start: number;
+  end: number;
+  volume: number;
+  cost: number;
 };
 
-type InsightsResponse = {
-  data: Insight[];
-  paging?: { next?: string };
+type PricingResponse = {
+  data: Array<{
+    data_points: PricingDataPoint[];
+  }>;
 };
-
-function todayUtc(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function startOfMonthUtc(): string {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
-}
-
-function daysAgoUtc(days: number): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - days);
-  return d.toISOString().slice(0, 10);
-}
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { cache: "no-store" });
@@ -54,51 +41,47 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 export async function fetchMetaUsage(
   accessToken: string,
-  adAccountId: string,
+  wabaId: string,
   days = 60
 ): Promise<MetaUsage> {
-  const actId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
+  const id = wabaId.trim();
+  const tokenParam = encodeURIComponent(accessToken);
 
-  const accountFields = ["name", "currency", "amount_spent", "balance"].join(",");
-  const accountUrl = `${GRAPH}/${actId}?fields=${accountFields}&access_token=${encodeURIComponent(accessToken)}`;
-  const account = await fetchJson<AdAccount>(accountUrl);
+  // Account-level info (name + currency)
+  const accountUrl = `${GRAPH}/${id}?fields=name,currency&access_token=${tokenParam}`;
+  const account = await fetchJson<WabaInfo>(accountUrl);
 
-  const since = daysAgoUtc(days);
-  const until = todayUtc();
-  const insightsParams = new URLSearchParams({
-    fields: "spend",
-    time_increment: "1",
-    "time_range[since]": since,
-    "time_range[until]": until,
-    limit: "200",
-    access_token: accessToken,
-  });
+  // Pricing analytics in unix seconds. Window must be ≤ 90 days.
+  const now = Math.floor(Date.now() / 1000);
+  const since = now - days * 24 * 60 * 60;
 
-  const insights: Insight[] = [];
-  let next: string | undefined = `${GRAPH}/${actId}/insights?${insightsParams.toString()}`;
-  while (next) {
-    const json: InsightsResponse = await fetchJson<InsightsResponse>(next);
-    insights.push(...json.data);
-    next = json.paging?.next;
+  const pricingUrl = `${GRAPH}/${id}/pricing_analytics?start=${since}&end=${now}&granularity=DAILY&access_token=${tokenParam}`;
+  const pricing = await fetchJson<PricingResponse>(pricingUrl);
+
+  const points = pricing.data?.[0]?.data_points ?? [];
+
+  // Bucket by BRT day. Each data point represents 24h starting at p.start.
+  const byDay = new Map<string, number>();
+  for (const p of points) {
+    const day = brDay(p.start * 1000);
+    byDay.set(day, (byDay.get(day) ?? 0) + (Number(p.cost) || 0));
   }
 
-  const daily = insights
-    .map((i) => ({ day: i.date_start, amount: parseFloat(i.spend) || 0 }))
+  const daily = Array.from(byDay.entries())
+    .map(([day, amount]) => ({ day, amount }))
     .sort((a, b) => (a.day < b.day ? -1 : 1));
 
-  const today = todayUtc();
-  const monthStart = startOfMonthUtc();
+  const today = brDay();
+  const monthStart = `${today.slice(0, 7)}-01`;
   const spentToday = daily.find((d) => d.day === today)?.amount ?? 0;
   const spentMonth = daily.filter((d) => d.day >= monthStart).reduce((s, d) => s + d.amount, 0);
-
-  const amountSpentMinor = parseFloat(account.amount_spent) || 0;
-  const balanceMinor = parseFloat(account.balance) || 0;
+  const totalSpent = daily.reduce((s, d) => s + d.amount, 0);
 
   return {
-    currency: account.currency,
+    currency: (account.currency || "USD").toUpperCase(),
     accountName: account.name,
-    totalSpent: amountSpentMinor / 100,
-    balance: balanceMinor / 100,
+    totalSpent,
+    balance: null,
     spentToday,
     spentMonth,
     daily,
