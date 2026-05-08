@@ -31,7 +31,57 @@ async function runRefresh() {
   const results: Record<string, unknown> = {};
   const errors: Record<string, string> = {};
 
-  // ---------- OpenAI (single source, split 50/50 in UI for the two CPOs) ----------
+  // Run all source captures in parallel; total time = max(any single source)
+  await Promise.allSettled([
+    captureOpenAI(results, errors),
+    captureMeta(
+      "meta",
+      process.env.META_ACCESS_TOKEN?.trim(),
+      process.env.META_WABA_ID?.trim() ?? process.env.META_AD_ACCOUNT_ID?.trim(),
+      results,
+      errors
+    ),
+    captureMeta(
+      "meta_b2b",
+      process.env.META_ACCESS_TOKEN_B2B?.trim(),
+      process.env.META_WABA_B2B_ID?.trim(),
+      results,
+      errors
+    ),
+    captureHubSpot(
+      "hubspot_b2c",
+      process.env.HUBSPOT_TOKEN?.trim(),
+      process.env.HUBSPOT_LEAD_PIPELINE?.trim(),
+      process.env.HUBSPOT_LEAD_STAGE?.trim(),
+      results,
+      errors
+    ),
+    captureHubSpot(
+      "hubspot_b2b",
+      process.env.HUBSPOT_TOKEN?.trim(),
+      process.env.HUBSPOT_LEAD_PIPELINE_B2B?.trim(),
+      process.env.HUBSPOT_LEAD_STAGE_B2B?.trim(),
+      results,
+      errors
+    ),
+  ]);
+
+  // Defensive cleanup: remove any future-dated rows (leftovers from when buckets were UTC)
+  try {
+    const today = brDay();
+    await db.delete(dailySpend).where(gt(dailySpend.day, today));
+  } catch (err) {
+    errors.cleanup = err instanceof Error ? err.message : String(err);
+  }
+
+  const status = Object.keys(errors).length === 0 ? 200 : 207;
+  return NextResponse.json({ ok: status === 200, results, errors }, { status });
+}
+
+async function captureOpenAI(
+  results: Record<string, unknown>,
+  errors: Record<string, string>
+): Promise<void> {
   try {
     const openai = await fetchOpenAIUsage(process.env.OPENAI_ADMIN_KEY!, 60);
     await db.insert(snapshots).values({
@@ -51,55 +101,6 @@ async function runRefresh() {
   } catch (err) {
     errors.openai = err instanceof Error ? err.message : String(err);
   }
-
-  // ---------- WhatsApp B2C (legacy "meta" source name) ----------
-  await captureMeta(
-    "meta",
-    process.env.META_ACCESS_TOKEN?.trim(),
-    process.env.META_WABA_ID?.trim() ?? process.env.META_AD_ACCOUNT_ID?.trim(),
-    results,
-    errors
-  );
-
-  // ---------- WhatsApp B2B ----------
-  await captureMeta(
-    "meta_b2b",
-    process.env.META_ACCESS_TOKEN_B2B?.trim(),
-    process.env.META_WABA_B2B_ID?.trim(),
-    results,
-    errors
-  );
-
-  // ---------- HubSpot B2C ----------
-  await captureHubSpot(
-    "hubspot_b2c",
-    process.env.HUBSPOT_TOKEN?.trim(),
-    process.env.HUBSPOT_LEAD_PIPELINE?.trim(),
-    process.env.HUBSPOT_LEAD_STAGE?.trim(),
-    results,
-    errors
-  );
-
-  // ---------- HubSpot B2B ----------
-  await captureHubSpot(
-    "hubspot_b2b",
-    process.env.HUBSPOT_TOKEN?.trim(),
-    process.env.HUBSPOT_LEAD_PIPELINE_B2B?.trim(),
-    process.env.HUBSPOT_LEAD_STAGE_B2B?.trim(),
-    results,
-    errors
-  );
-
-  // Defensive cleanup: remove any future-dated rows (leftovers from when buckets were UTC)
-  try {
-    const today = brDay();
-    await db.delete(dailySpend).where(gt(dailySpend.day, today));
-  } catch (err) {
-    errors.cleanup = err instanceof Error ? err.message : String(err);
-  }
-
-  const status = Object.keys(errors).length === 0 ? 200 : 207;
-  return NextResponse.json({ ok: status === 200, results, errors }, { status });
 }
 
 async function captureMeta(
