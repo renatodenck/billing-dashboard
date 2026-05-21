@@ -77,7 +77,8 @@ export async function fetchAnthropicUsage(adminKey: string, days = 60): Promise<
     for (const r of b.results) {
       const raw = r.amount;
       const v = typeof raw === "string" ? parseFloat(raw) : typeof raw === "number" ? raw : 0;
-      if (Number.isFinite(v)) amount += v;
+      // Anthropic Cost Report API returns amounts in cents (minor unit). Convert to dollars.
+      if (Number.isFinite(v)) amount += v / 100;
       if (r.currency) currency = r.currency.toUpperCase();
     }
     byDay.set(day, amount);
