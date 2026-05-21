@@ -27,6 +27,7 @@ import {
 
 const SOURCE_META = {
   openai: { label: "OpenAI", accent: "#FF640F", soft: "#FFE5D5", caption: "Inteligência Artificial" },
+  anthropic: { label: "Anthropic", accent: "#CC785C", soft: "#F5E1D6", caption: "Claude (Sonnet/Opus)" },
   meta: { label: "WhatsApp B2C", accent: "#053CAA", soft: "#E1E9FF", caption: "Custo de disparo" },
   meta_b2b: { label: "WhatsApp B2B", accent: "#1E3A8A", soft: "#DBEAFE", caption: "Custo de disparo" },
 } as const;
@@ -163,8 +164,9 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="mb-6">
+        <div className="mb-6 grid gap-6 md:grid-cols-2">
           <SourceCard source="openai" data={data} range={range} />
+          <SourceCard source="anthropic" data={data} range={range} />
         </div>
 
         <div className="mb-6 grid gap-6 md:grid-cols-2">

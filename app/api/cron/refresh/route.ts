@@ -3,6 +3,7 @@ import { sql, gt } from "drizzle-orm";
 import { db } from "@/db";
 import { snapshots, dailySpend } from "@/db/schema";
 import { fetchOpenAIUsage } from "@/lib/openai";
+import { fetchAnthropicUsage } from "@/lib/anthropic";
 import { fetchMetaUsage } from "@/lib/meta";
 import { fetchHubSpotLeads } from "@/lib/hubspot";
 import { brDay } from "@/lib/format";
@@ -34,6 +35,7 @@ async function runRefresh() {
   // Run all source captures in parallel; total time = max(any single source)
   await Promise.allSettled([
     captureOpenAI(results, errors),
+    captureAnthropic(results, errors),
     captureMeta(
       "meta",
       process.env.META_ACCESS_TOKEN?.trim(),
@@ -100,6 +102,36 @@ async function captureOpenAI(
     };
   } catch (err) {
     errors.openai = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function captureAnthropic(
+  results: Record<string, unknown>,
+  errors: Record<string, string>
+): Promise<void> {
+  const key = process.env.ANTHROPIC_ADMIN_KEY?.trim();
+  if (!key) {
+    results.anthropic = { skipped: true, reason: "ANTHROPIC_ADMIN_KEY not set" };
+    return;
+  }
+  try {
+    const data = await fetchAnthropicUsage(key, 60);
+    await db.insert(snapshots).values({
+      source: "anthropic",
+      currency: data.currency,
+      totalSpent: data.totalSpent.toFixed(4),
+      spentToday: data.spentToday.toFixed(4),
+      spentMonth: data.spentMonth.toFixed(4),
+      raw: { daily: data.daily },
+    });
+    await upsertDaily("anthropic", data.currency, data.daily);
+    results.anthropic = {
+      currency: data.currency,
+      totalSpent: data.totalSpent,
+      days: data.daily.length,
+    };
+  } catch (err) {
+    errors.anthropic = err instanceof Error ? err.message : String(err);
   }
 }
 
