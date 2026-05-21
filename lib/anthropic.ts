@@ -44,7 +44,7 @@ export async function fetchAnthropicUsage(adminKey: string, days = 60): Promise<
       starting_at: startingAt,
       ending_at: endingAt,
       bucket_width: "1d",
-      limit: "90",
+      limit: "31",
     });
     if (nextPage) params.set("page", nextPage);
 
