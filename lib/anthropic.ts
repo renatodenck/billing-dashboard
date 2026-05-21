@@ -71,7 +71,8 @@ export async function fetchAnthropicUsage(adminKey: string, days = 60): Promise<
   const byDay = new Map<string, number>();
 
   for (const b of buckets) {
-    const day = brDay(b.starting_at);
+    // Use UTC day from starting_at (matches Anthropic console and OpenAI behavior).
+    const day = b.starting_at.slice(0, 10);
     let amount = byDay.get(day) ?? 0;
     for (const r of b.results) {
       const raw = r.amount;
