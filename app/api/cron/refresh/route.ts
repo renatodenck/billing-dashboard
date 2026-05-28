@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { snapshots, dailySpend } from "@/db/schema";
 import { fetchOpenAIUsage } from "@/lib/openai";
 import { fetchAnthropicUsage } from "@/lib/anthropic";
-import { fetchMetaUsage, fetchMetaUsageMinusTemplates } from "@/lib/meta";
+import { fetchMetaUsage } from "@/lib/meta";
 import { fetchHubSpotLeads, fetchHubSpotMeetings } from "@/lib/hubspot";
 import { brDay } from "@/lib/format";
 
@@ -66,7 +66,6 @@ async function runRefresh() {
       results,
       errors
     ),
-    captureMetaFiltered(results, errors),
     captureMeetings(results, errors),
   ]);
 
@@ -134,56 +133,6 @@ async function captureAnthropic(
     };
   } catch (err) {
     errors.anthropic = err instanceof Error ? err.message : String(err);
-  }
-}
-
-async function captureMetaFiltered(
-  results: Record<string, unknown>,
-  errors: Record<string, string>
-): Promise<void> {
-  const source = "meta_b2c_filtered";
-  const token = process.env.META_ACCESS_TOKEN?.trim();
-  const wabaId =
-    process.env.META_WABA_ID?.trim() ?? process.env.META_AD_ACCOUNT_ID?.trim();
-  const excludedRaw = process.env.META_B2C_EXCLUDED_TEMPLATES?.trim() ?? "";
-  const excluded = excludedRaw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  if (!token || !wabaId || excluded.length === 0) {
-    results[source] = {
-      skipped: true,
-      reason: "META_ACCESS_TOKEN, META_WABA_ID or META_B2C_EXCLUDED_TEMPLATES not set",
-    };
-    return;
-  }
-  try {
-    const data = await fetchMetaUsageMinusTemplates(token, wabaId, excluded, 60);
-    await db.insert(snapshots).values({
-      source,
-      currency: data.currency,
-      totalSpent: data.totalSpent.toFixed(4),
-      spentToday: data.spentToday.toFixed(4),
-      spentMonth: data.spentMonth.toFixed(4),
-      raw: {
-        daily: data.daily,
-        accountName: data.accountName,
-        rawTotalSpent: data.rawTotalSpent,
-        excludedRatio: data.excludedRatio,
-        excludedTemplates: excluded,
-      },
-    });
-    await upsertDaily(source, data.currency, data.daily);
-    results[source] = {
-      currency: data.currency,
-      totalSpent: data.totalSpent,
-      rawTotalSpent: data.rawTotalSpent,
-      excludedRatio: data.excludedRatio,
-      days: data.daily.length,
-    };
-  } catch (err) {
-    errors[source] = err instanceof Error ? err.message : String(err);
   }
 }
 

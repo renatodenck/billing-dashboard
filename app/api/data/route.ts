@@ -27,7 +27,6 @@ export async function GET() {
     "anthropic",
     "meta",
     "meta_b2b",
-    "meta_b2c_filtered",
     "hubspot_b2c",
     "hubspot_b2b",
     "hubspot_meetings_b2c",

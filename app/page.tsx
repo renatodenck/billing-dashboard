@@ -562,15 +562,12 @@ function MeetingsCard({
   data: DashboardPayload | null;
   range: DateRange;
 }) {
-  const metaFilteredDaily = data?.daily.meta_b2c_filtered ?? [];
+  const metaDaily = data?.daily.meta ?? [];
   const meetingsDaily = data?.daily.hubspot_meetings_b2c ?? [];
-  const filteredSource = data?.sources.meta_b2c_filtered;
+  const metaSource = data?.sources.meta;
   const meetingsSource = data?.sources.hubspot_meetings_b2c;
 
-  const filteredMeta = useMemo(
-    () => filterDaily(metaFilteredDaily, range),
-    [metaFilteredDaily, range]
-  );
+  const filteredMeta = useMemo(() => filterDaily(metaDaily, range), [metaDaily, range]);
   const filteredMeetings = useMemo(
     () => filterDaily(meetingsDaily, range),
     [meetingsDaily, range]
@@ -580,18 +577,14 @@ function MeetingsCard({
   const totalMeetings = filteredMeetings.reduce((s, d) => s + d.amount, 0);
   const cpr = totalMeetings > 0 ? totalCost / totalMeetings : null;
 
-  const currency = filteredSource?.currency ?? "USD";
+  const currency = metaSource?.currency ?? "USD";
   const configured =
-    metaFilteredDaily.length > 0 ||
-    filteredSource?.capturedAt != null ||
-    meetingsDaily.length > 0 ||
-    meetingsSource?.capturedAt != null;
+    meetingsDaily.length > 0 || meetingsSource?.capturedAt != null;
 
   if (!configured) {
     return (
       <section className="rounded-2xl border border-dashed border-psa-line bg-white px-6 py-8 text-center text-sm text-psa-muted">
-        Configure <code className="text-psa-ink">META_B2C_EXCLUDED_TEMPLATES</code>,{" "}
-        <code className="text-psa-ink">HUBSPOT_MEETING_OWNER_IDS</code> e{" "}
+        Configure <code className="text-psa-ink">HUBSPOT_MEETING_OWNER_IDS</code> e{" "}
         <code className="text-psa-ink">HUBSPOT_MEETING_EXCLUDED_TYPES</code> pra ver o custo por reunião.
       </section>
     );
@@ -607,7 +600,7 @@ function MeetingsCard({
           <div>
             <h3 className="text-base font-semibold text-psa-ink">Custo por reunião marcada B2C</h3>
             <p className="text-xs text-psa-muted">
-              Custo/reunião = (WhatsApp B2C, sem templates de cadência) ÷ reuniões agendadas SDR
+              Custo/reunião = Custo total WhatsApp B2C ÷ reuniões agendadas pelo time SDR
             </p>
           </div>
         </div>
@@ -623,15 +616,12 @@ function MeetingsCard({
         />
         <Stat label="Reuniões marcadas" raw={totalMeetings.toLocaleString("pt-BR")} />
         <Stat
-          label="Custo WhatsApp (filtrado)"
+          label="Custo WhatsApp"
           value={totalCost > 0 ? totalCost : null}
           currency={currency}
         />
         <Stat
           label="Média reuniões/dia"
-          value={filteredMeetings.length > 0 && totalMeetings > 0
-            ? totalMeetings / filteredMeetings.length
-            : null}
           raw={filteredMeetings.length > 0 && totalMeetings > 0
             ? (totalMeetings / filteredMeetings.length).toFixed(1)
             : "—"}
