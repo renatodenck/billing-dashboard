@@ -174,9 +174,13 @@ export default function DashboardPage() {
           <SourceCard source="meta_b2b" data={data} range={range} />
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="mb-6 grid gap-6 md:grid-cols-2">
           <AcquisitionCard variant="b2c" data={data} range={range} />
           <AcquisitionCard variant="b2b" data={data} range={range} />
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          <MeetingsCard data={data} range={range} />
         </div>
 
         <footer className="mt-12 border-t border-psa-line pt-6 text-center text-xs text-psa-muted">
@@ -540,6 +544,140 @@ function AcquisitionCard({
                   labelStyle={{ color: "#0B1320", fontWeight: 600 }}
                   labelFormatter={formatDateBR}
                   formatter={(value: number) => [`${value} lead${value === 1 ? "" : "s"}`, "Qualificados"]}
+                />
+                <Bar dataKey="amount" fill="#FF640F" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MeetingsCard({
+  data,
+  range,
+}: {
+  data: DashboardPayload | null;
+  range: DateRange;
+}) {
+  const metaFilteredDaily = data?.daily.meta_b2c_filtered ?? [];
+  const meetingsDaily = data?.daily.hubspot_meetings_b2c ?? [];
+  const filteredSource = data?.sources.meta_b2c_filtered;
+  const meetingsSource = data?.sources.hubspot_meetings_b2c;
+
+  const filteredMeta = useMemo(
+    () => filterDaily(metaFilteredDaily, range),
+    [metaFilteredDaily, range]
+  );
+  const filteredMeetings = useMemo(
+    () => filterDaily(meetingsDaily, range),
+    [meetingsDaily, range]
+  );
+
+  const totalCost = filteredMeta.reduce((s, d) => s + d.amount, 0);
+  const totalMeetings = filteredMeetings.reduce((s, d) => s + d.amount, 0);
+  const cpr = totalMeetings > 0 ? totalCost / totalMeetings : null;
+
+  const currency = filteredSource?.currency ?? "USD";
+  const configured =
+    metaFilteredDaily.length > 0 ||
+    filteredSource?.capturedAt != null ||
+    meetingsDaily.length > 0 ||
+    meetingsSource?.capturedAt != null;
+
+  if (!configured) {
+    return (
+      <section className="rounded-2xl border border-dashed border-psa-line bg-white px-6 py-8 text-center text-sm text-psa-muted">
+        Configure <code className="text-psa-ink">META_B2C_EXCLUDED_TEMPLATES</code>,{" "}
+        <code className="text-psa-ink">HUBSPOT_MEETING_OWNER_IDS</code> e{" "}
+        <code className="text-psa-ink">HUBSPOT_MEETING_EXCLUDED_TYPES</code> pra ver o custo por reunião.
+      </section>
+    );
+  }
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-psa-line bg-white shadow-sm">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-psa-line px-6 py-4">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-psa-orange-soft text-sm font-bold text-psa-orange">
+            📅
+          </span>
+          <div>
+            <h3 className="text-base font-semibold text-psa-ink">Custo por reunião marcada B2C</h3>
+            <p className="text-xs text-psa-muted">
+              Custo/reunião = (WhatsApp B2C, sem templates de cadência) ÷ reuniões agendadas SDR
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-2 gap-px bg-psa-line sm:grid-cols-4">
+        <Stat
+          label="Custo/reunião"
+          value={cpr}
+          currency={currency}
+          highlight
+          accent="#FF640F"
+        />
+        <Stat label="Reuniões marcadas" raw={totalMeetings.toLocaleString("pt-BR")} />
+        <Stat
+          label="Custo WhatsApp (filtrado)"
+          value={totalCost > 0 ? totalCost : null}
+          currency={currency}
+        />
+        <Stat
+          label="Média reuniões/dia"
+          value={filteredMeetings.length > 0 && totalMeetings > 0
+            ? totalMeetings / filteredMeetings.length
+            : null}
+          raw={filteredMeetings.length > 0 && totalMeetings > 0
+            ? (totalMeetings / filteredMeetings.length).toFixed(1)
+            : "—"}
+        />
+      </div>
+
+      <div className="px-4 pb-5 pt-4">
+        <div className="h-44">
+          {filteredMeetings.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-sm text-psa-muted">
+              Sem reuniões no período selecionado.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={filteredMeetings}
+                margin={{ top: 5, right: 10, left: -15, bottom: 0 }}
+              >
+                <CartesianGrid stroke="#EEF1F5" vertical={false} />
+                <XAxis
+                  dataKey="day"
+                  tickFormatter={formatDateBR}
+                  stroke="#9AA4B2"
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                  minTickGap={24}
+                />
+                <YAxis
+                  stroke="#9AA4B2"
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "#FFFFFF",
+                    border: "1px solid #E6E9EF",
+                    borderRadius: 10,
+                    fontSize: 12,
+                    boxShadow: "0 4px 16px rgba(11,19,32,0.08)",
+                  }}
+                  labelStyle={{ color: "#0B1320", fontWeight: 600 }}
+                  labelFormatter={formatDateBR}
+                  formatter={(value: number) => [`${value} reuniã${value === 1 ? "o" : "es"}`, "Marcadas"]}
                 />
                 <Bar dataKey="amount" fill="#FF640F" radius={[4, 4, 0, 0]} />
               </BarChart>

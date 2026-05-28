@@ -4,8 +4,8 @@ import { db } from "@/db";
 import { snapshots, dailySpend } from "@/db/schema";
 import { fetchOpenAIUsage } from "@/lib/openai";
 import { fetchAnthropicUsage } from "@/lib/anthropic";
-import { fetchMetaUsage } from "@/lib/meta";
-import { fetchHubSpotLeads } from "@/lib/hubspot";
+import { fetchMetaUsage, fetchMetaUsageMinusTemplates } from "@/lib/meta";
+import { fetchHubSpotLeads, fetchHubSpotMeetings } from "@/lib/hubspot";
 import { brDay } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -66,6 +66,8 @@ async function runRefresh() {
       results,
       errors
     ),
+    captureMetaFiltered(results, errors),
+    captureMeetings(results, errors),
   ]);
 
   // Defensive cleanup: remove any future-dated rows (leftovers from when buckets were UTC)
@@ -132,6 +134,92 @@ async function captureAnthropic(
     };
   } catch (err) {
     errors.anthropic = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function captureMetaFiltered(
+  results: Record<string, unknown>,
+  errors: Record<string, string>
+): Promise<void> {
+  const source = "meta_b2c_filtered";
+  const token = process.env.META_ACCESS_TOKEN?.trim();
+  const wabaId =
+    process.env.META_WABA_ID?.trim() ?? process.env.META_AD_ACCOUNT_ID?.trim();
+  const excludedRaw = process.env.META_B2C_EXCLUDED_TEMPLATES?.trim() ?? "";
+  const excluded = excludedRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (!token || !wabaId || excluded.length === 0) {
+    results[source] = {
+      skipped: true,
+      reason: "META_ACCESS_TOKEN, META_WABA_ID or META_B2C_EXCLUDED_TEMPLATES not set",
+    };
+    return;
+  }
+  try {
+    const data = await fetchMetaUsageMinusTemplates(token, wabaId, excluded, 60);
+    await db.insert(snapshots).values({
+      source,
+      currency: data.currency,
+      totalSpent: data.totalSpent.toFixed(4),
+      spentToday: data.spentToday.toFixed(4),
+      spentMonth: data.spentMonth.toFixed(4),
+      raw: {
+        daily: data.daily,
+        accountName: data.accountName,
+        rawTotalSpent: data.rawTotalSpent,
+        excludedRatio: data.excludedRatio,
+        excludedTemplates: excluded,
+      },
+    });
+    await upsertDaily(source, data.currency, data.daily);
+    results[source] = {
+      currency: data.currency,
+      totalSpent: data.totalSpent,
+      rawTotalSpent: data.rawTotalSpent,
+      excludedRatio: data.excludedRatio,
+      days: data.daily.length,
+    };
+  } catch (err) {
+    errors[source] = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function captureMeetings(
+  results: Record<string, unknown>,
+  errors: Record<string, string>
+): Promise<void> {
+  const source = "hubspot_meetings_b2c";
+  const token = process.env.HUBSPOT_TOKEN?.trim();
+  const ownersRaw = process.env.HUBSPOT_MEETING_OWNER_IDS?.trim() ?? "";
+  const typesRaw = process.env.HUBSPOT_MEETING_EXCLUDED_TYPES?.trim() ?? "";
+  const ownerIds = ownersRaw.split(",").map((s) => s.trim()).filter(Boolean);
+  const excludedTypes = typesRaw.split(";").map((s) => s.trim()).filter(Boolean);
+
+  if (!token || ownerIds.length === 0) {
+    results[source] = {
+      skipped: true,
+      reason: "HUBSPOT_TOKEN or HUBSPOT_MEETING_OWNER_IDS not set",
+    };
+    return;
+  }
+  try {
+    const data = await fetchHubSpotMeetings(token, ownerIds, excludedTypes, 60);
+    await db.insert(snapshots).values({
+      source,
+      currency: "MEETINGS",
+      totalSpent: data.total.toFixed(4),
+      raw: { daily: data.daily, ownerIds, excludedTypes },
+    });
+    await upsertDaily(source, "MEETINGS", data.daily);
+    results[source] = {
+      total: data.total,
+      days: data.daily.length,
+    };
+  } catch (err) {
+    errors[source] = err instanceof Error ? err.message : String(err);
   }
 }
 

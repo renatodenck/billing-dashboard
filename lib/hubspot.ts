@@ -186,3 +186,99 @@ export async function fetchHubSpotLeads(
     stageId,
   };
 }
+
+// ---------- Meetings ----------
+
+type MeetingSearchResult = {
+  id: string;
+  properties: Record<string, string | null>;
+  createdAt: string;
+};
+
+type MeetingSearchResponse = {
+  total: number;
+  results: MeetingSearchResult[];
+  paging?: { next?: { after?: string } };
+};
+
+export type HubSpotMeetings = {
+  total: number;
+  daily: Array<{ day: string; amount: number }>;
+};
+
+export async function fetchHubSpotMeetings(
+  token: string,
+  ownerIds: string[],
+  excludedActivityTypes: string[],
+  days = 60
+): Promise<HubSpotMeetings> {
+  const now = Date.now();
+  const since = now - days * 24 * 60 * 60 * 1000;
+
+  // Common filters (createdate range + assignee in owner list).
+  const commonFilters: Array<Record<string, unknown>> = [
+    { propertyName: "hs_createdate", operator: "GTE", value: String(since) },
+    { propertyName: "hs_createdate", operator: "LT", value: String(now) },
+    { propertyName: "hubspot_owner_id", operator: "IN", values: ownerIds },
+  ];
+
+  // Two filterGroups OR'd: (type NOT_IN excluded) OR (type is empty).
+  // HubSpot's NOT_IN does NOT include records without a value, so we need both groups.
+  const filterGroups = [
+    {
+      filters: [
+        ...commonFilters,
+        { propertyName: "hs_activity_type", operator: "NOT_IN", values: excludedActivityTypes },
+      ],
+    },
+    {
+      filters: [
+        ...commonFilters,
+        { propertyName: "hs_activity_type", operator: "NOT_HAS_PROPERTY" },
+      ],
+    },
+  ];
+
+  const meetings: MeetingSearchResult[] = [];
+  let after: string | undefined;
+  do {
+    const body = {
+      filterGroups,
+      properties: ["hs_createdate", "hs_activity_type"],
+      sorts: [{ propertyName: "hs_createdate", direction: "ASCENDING" }],
+      limit: 100,
+      ...(after ? { after } : {}),
+    };
+
+    const json = await fetchJson<MeetingSearchResponse>(
+      `${API}/crm/v3/objects/meetings/search`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      }
+    );
+
+    meetings.push(...json.results);
+    after = json.paging?.next?.after;
+    if (after) await sleep(120);
+  } while (after);
+
+  const byDay = new Map<string, number>();
+  for (const m of meetings) {
+    const created = m.properties.hs_createdate ?? m.createdAt;
+    if (!created) continue;
+    const day = brDay(created);
+    byDay.set(day, (byDay.get(day) ?? 0) + 1);
+  }
+
+  const daily = Array.from(byDay.entries())
+    .map(([day, amount]) => ({ day, amount }))
+    .sort((a, b) => (a.day < b.day ? -1 : 1));
+
+  return { total: meetings.length, daily };
+}
+

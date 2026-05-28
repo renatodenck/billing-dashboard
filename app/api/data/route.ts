@@ -22,7 +22,16 @@ export type DashboardPayload = {
 };
 
 export async function GET() {
-  const sources = ["openai", "anthropic", "meta", "meta_b2b", "hubspot_b2c", "hubspot_b2b"];
+  const sources = [
+    "openai",
+    "anthropic",
+    "meta",
+    "meta_b2b",
+    "meta_b2c_filtered",
+    "hubspot_b2c",
+    "hubspot_b2b",
+    "hubspot_meetings_b2c",
+  ];
   const result: DashboardPayload = { sources: {}, daily: {} };
 
   for (const source of sources) {
