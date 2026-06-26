@@ -108,7 +108,7 @@ export async function fetchClarityInsights(token: string, numOfDays = 3): Promis
   }
   // Smart events: sessions affected + total occurrences, summed across devices.
   const event = (name: string): SmartEvent =>
-    rows(name).reduce(
+    rows(name).reduce<SmartEvent>(
       (acc, r) => ({ sessions: acc.sessions + num(r.sessionsCount), total: acc.total + num(r.subTotal) }),
       { sessions: 0, total: 0 }
     );
