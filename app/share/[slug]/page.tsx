@@ -19,6 +19,7 @@ import { formatDateBR, formatMoney } from "@/lib/format";
 import { PRESET_LABELS, presetToRange, type DateRange, type RangePreset } from "@/lib/dateRange";
 import type { TemplateAnalytics, TemplateSummary } from "@/lib/metaTemplates";
 import type { DealsFunnel } from "@/lib/hubspotDeals";
+import type { ClarityInsights } from "@/lib/clarity";
 
 // 50 Palestras / The Best Speaker brand palette (from the landing page).
 const C = {
@@ -49,7 +50,7 @@ const DEAL_SERIES = [
   { key: "waiting", label: "Aguardando pagamento", color: "#8b87a8" },
 ] as const;
 
-type TabKey = "whatsapp" | "negocios";
+type TabKey = "whatsapp" | "negocios" | "pagina";
 
 type Payload = {
   title: string;
@@ -58,6 +59,9 @@ type Payload = {
   analytics: TemplateAnalytics;
   deals: DealsFunnel | null;
   dealsError: string | null;
+  page: ClarityInsights | null;
+  pageError: string | null;
+  clarityProjectId: string | null;
 };
 
 export default function SharePage() {
@@ -176,6 +180,7 @@ export default function SharePage() {
           {([
             { key: "whatsapp", label: "WhatsApp" },
             { key: "negocios", label: "Negócios" },
+            { key: "pagina", label: "Página" },
           ] as const).map((tb) => {
             const active = tab === tb.key;
             return (
@@ -255,6 +260,13 @@ export default function SharePage() {
 
         {tab === "negocios" ? (
           <DealsView deals={data?.deals ?? null} error={data?.dealsError ?? null} loading={loading} />
+        ) : tab === "pagina" ? (
+          <ClarityView
+            page={data?.page ?? null}
+            error={data?.pageError ?? null}
+            projectId={data?.clarityProjectId ?? null}
+            loading={loading}
+          />
         ) : (
         <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
           <TemplatePreviewCard template={data?.template ?? null} />
@@ -403,6 +415,102 @@ function ShareLogin({ onSuccess }: { onSuccess: () => void }) {
           {busy ? "Entrando…" : "Entrar"}
         </button>
       </form>
+    </div>
+  );
+}
+
+function ClarityView({
+  page,
+  error,
+  projectId,
+  loading,
+}: {
+  page: ClarityInsights | null;
+  error: string | null;
+  projectId: string | null;
+  loading: boolean;
+}) {
+  if (error) {
+    return (
+      <div
+        className="rounded-xl px-4 py-3 text-sm"
+        style={{ background: "rgba(232,49,42,.12)", border: `1px solid ${C.red}`, color: "#ffb3b0" }}
+      >
+        Erro ao carregar dados da página: {error}
+      </div>
+    );
+  }
+  if (loading && !page) {
+    return (
+      <div className="flex h-64 items-center justify-center text-sm" style={{ color: C.muted }}>
+        Carregando…
+      </div>
+    );
+  }
+
+  const heatmapUrl = projectId
+    ? `https://clarity.microsoft.com/projects/view/${projectId}/heatmaps`
+    : null;
+  const fmtInt = (n: number) => n.toLocaleString("pt-BR");
+  const fmtPct = (n: number | null) => (n == null ? "—" : `${n.toFixed(0)}%`);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-[2px]" style={{ color: C.yellow }}>
+            Landing page · Microsoft Clarity
+          </div>
+          <p className="mt-1 text-sm" style={{ color: C.muted }}>
+            lps.profissionaissa.com/50palestras · últimos {page?.numOfDays ?? 3} dias
+          </p>
+        </div>
+        {heatmapUrl && (
+          <a
+            href={heatmapUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wide"
+            style={{ background: C.yellow, color: "#1a1500" }}
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Ver mapa de calor
+          </a>
+        )}
+      </div>
+
+      {/* Métricas principais */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <FunnelCard label="Visitas únicas" value={page ? fmtInt(page.uniqueUsers) : "—"} hint="usuários distintos" color="#22c55e" />
+        <FunnelCard label="Sessões" value={page ? fmtInt(page.sessions) : "—"} hint={page ? `${fmtInt(page.bots)} de bots` : ""} color={C.text} />
+        <FunnelCard label="Páginas / sessão" value={page?.pagesPerSession != null ? page.pagesPerSession.toFixed(1) : "—"} hint="navegação por visita" color={C.text} />
+        <FunnelCard label="Scroll médio" value={fmtPct(page?.avgScrollDepth ?? null)} hint="profundidade da página" color="#2dd4bf" />
+      </div>
+
+      {/* Engajamento e qualidade de cliques */}
+      <section className="overflow-hidden rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+        <header className="px-6 py-4" style={{ borderBottom: `1px solid ${C.line}` }}>
+          <div className="text-[11px] font-bold uppercase tracking-[2px]" style={{ color: C.muted }}>
+            Cliques e engajamento
+          </div>
+        </header>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" style={{ background: C.line, gap: "1px" }}>
+          <MetricCell
+            label="Tempo ativo (min)"
+            value={page?.activeTimeMin != null ? Number(page.activeTimeMin.toFixed(1)) : null}
+          />
+          <MetricCell label="Cliques mortos" value={page?.deadClicks ?? null} />
+          <MetricCell label="Cliques de raiva" value={page?.rageClicks ?? null} />
+          <MetricCell label="Voltas rápidas" value={page?.quickbackClicks ?? null} />
+          <MetricCell label="Cliques c/ erro" value={page?.errorClicks ?? null} />
+        </div>
+      </section>
+
+      <p className="text-[11px]" style={{ color: C.muted }}>
+        ⚠️ A API do Clarity entrega apenas os <strong>últimos 3 dias</strong> (agregado). O mapa de
+        calor e as gravações de sessão completas ficam no painel do Clarity (requer acesso). Os dados
+        começaram a contar a partir da instalação.
+      </p>
     </div>
   );
 }

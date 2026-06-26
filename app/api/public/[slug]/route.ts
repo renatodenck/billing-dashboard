@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { getAccount } from "@/lib/metaAccounts";
 import { fetchTemplateAnalytics, fetchTemplateById } from "@/lib/metaTemplates";
 import { fetchDealsFunnel } from "@/lib/hubspotDeals";
+import { fetchClarityInsights } from "@/lib/clarity";
 import { getSharedTemplate } from "@/lib/sharedTemplates";
 import { expectedSession } from "@/lib/shareAuth";
 
@@ -72,8 +73,30 @@ export async function GET(
       }
     }
 
+    // Optional landing-page analytics (Microsoft Clarity). Fails soft.
+    let page = null;
+    let pageError: string | null = null;
+    const clarityToken = process.env.CLARITY_API_TOKEN?.trim();
+    if (shared.clarityProjectId && clarityToken) {
+      try {
+        page = await fetchClarityInsights(clarityToken);
+      } catch (err) {
+        pageError = err instanceof Error ? err.message : String(err);
+      }
+    }
+
     return NextResponse.json(
-      { title: shared.title, subtitle: shared.subtitle, template, analytics, deals, dealsError },
+      {
+        title: shared.title,
+        subtitle: shared.subtitle,
+        template,
+        analytics,
+        deals,
+        dealsError,
+        page,
+        pageError,
+        clarityProjectId: shared.clarityProjectId ?? null,
+      },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {

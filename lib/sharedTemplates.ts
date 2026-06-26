@@ -21,6 +21,8 @@ export type SharedTemplate = {
   subtitle: string;
   /** Optional HubSpot deals funnel for the same product. */
   deals?: DealsConfig;
+  /** Microsoft Clarity project ID for the landing-page tab (heatmap link + metrics). */
+  clarityProjectId?: string;
 };
 
 export const SHARED_TEMPLATES: SharedTemplate[] = [
@@ -47,6 +49,7 @@ export const SHARED_TEMPLATES: SharedTemplate[] = [
         "61651362152", // "teste kiwify" — abandono de teste
       ],
     },
+    clarityProjectId: "xd5svsofi5",
   },
 ];
 
