@@ -8,6 +8,9 @@ const CLARITY_API = "https://www.clarity.ms/export-data/api/v1/project-live-insi
 
 export type DeviceBreakdown = { device: string; sessions: number; users: number };
 
+/** A Clarity "insight" smart event: sessions affected + total occurrences. */
+export type SmartEvent = { sessions: number; total: number };
+
 export type ClarityInsights = {
   numOfDays: number;
   sessions: number;
@@ -17,10 +20,11 @@ export type ClarityInsights = {
   avgScrollDepth: number | null;
   totalTimeMin: number | null;
   activeTimeMin: number | null;
-  deadClicks: number;
-  rageClicks: number;
-  quickbackClicks: number;
-  errorClicks: number;
+  rageClicks: SmartEvent;
+  deadClicks: SmartEvent;
+  excessiveScroll: SmartEvent;
+  quickbackClicks: SmartEvent;
+  errorClicks: SmartEvent;
   devices: DeviceBreakdown[];
 };
 
@@ -102,7 +106,12 @@ export async function fetchClarityInsights(token: string, numOfDays = 3): Promis
     totalTime += num(r.totalTime);
     activeTime += num(r.activeTime);
   }
-  const sumSub = (name: string) => rows(name).reduce((acc, r) => acc + num(r.subTotal), 0);
+  // Smart events: sessions affected + total occurrences, summed across devices.
+  const event = (name: string): SmartEvent =>
+    rows(name).reduce(
+      (acc, r) => ({ sessions: acc.sessions + num(r.sessionsCount), total: acc.total + num(r.subTotal) }),
+      { sessions: 0, total: 0 }
+    );
 
   return {
     numOfDays,
@@ -113,10 +122,11 @@ export async function fetchClarityInsights(token: string, numOfDays = 3): Promis
     avgScrollDepth: scrollWeight > 0 ? scrollWeighted / scrollWeight : null,
     totalTimeMin: totalTime > 0 ? totalTime : null,
     activeTimeMin: activeTime > 0 ? activeTime : null,
-    deadClicks: sumSub("DeadClickCount"),
-    rageClicks: sumSub("RageClickCount"),
-    quickbackClicks: sumSub("QuickbackClick"),
-    errorClicks: sumSub("ErrorClickCount"),
+    rageClicks: event("RageClickCount"),
+    deadClicks: event("DeadClickCount"),
+    excessiveScroll: event("ExcessiveScroll"),
+    quickbackClicks: event("QuickbackClick"),
+    errorClicks: event("ErrorClickCount"),
     devices,
   };
 }

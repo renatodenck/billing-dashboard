@@ -19,7 +19,7 @@ import { formatDateBR, formatMoney } from "@/lib/format";
 import { PRESET_LABELS, presetToRange, type DateRange, type RangePreset } from "@/lib/dateRange";
 import type { TemplateAnalytics, TemplateSummary } from "@/lib/metaTemplates";
 import type { DealsFunnel } from "@/lib/hubspotDeals";
-import type { ClarityInsights } from "@/lib/clarity";
+import type { ClarityInsights, SmartEvent } from "@/lib/clarity";
 
 // 50 Palestras / The Best Speaker brand palette (from the landing page).
 const C = {
@@ -517,22 +517,25 @@ function ClarityView({
             <FunnelCard label="Scroll médio" value={fmtPct(page?.avgScrollDepth ?? null)} hint="profundidade da página" color="#2dd4bf" />
           </div>
 
-          {/* Engajamento e qualidade de cliques */}
+          {/* Insights (smart events do Clarity) */}
           <section className="overflow-hidden rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
             <header className="px-6 py-4" style={{ borderBottom: `1px solid ${C.line}` }}>
               <div className="text-[11px] font-bold uppercase tracking-[2px]" style={{ color: C.muted }}>
-                Cliques e engajamento
+                Insights · cliques e engajamento
               </div>
             </header>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" style={{ background: C.line, gap: "1px" }}>
-              <MetricCell
-                label="Tempo ativo (min)"
-                value={page?.activeTimeMin != null ? Number(page.activeTimeMin.toFixed(1)) : null}
-              />
-              <MetricCell label="Cliques mortos" value={page?.deadClicks ?? null} />
-              <MetricCell label="Cliques de raiva" value={page?.rageClicks ?? null} />
-              <MetricCell label="Voltas rápidas" value={page?.quickbackClicks ?? null} />
-              <MetricCell label="Cliques c/ erro" value={page?.errorClicks ?? null} />
+            <div className="grid grid-cols-2 sm:grid-cols-3" style={{ background: C.line, gap: "1px" }}>
+              <InsightCard label="Cliques contínuos" event={page?.rageClicks} sessions={page?.sessions ?? 0} />
+              <InsightCard label="Cliques mortos" event={page?.deadClicks} sessions={page?.sessions ?? 0} />
+              <InsightCard label="Rolagem excessiva" event={page?.excessiveScroll} sessions={page?.sessions ?? 0} />
+              <InsightCard label="Voltas rápidas" event={page?.quickbackClicks} sessions={page?.sessions ?? 0} />
+              <InsightCard label="Cliques com erro" event={page?.errorClicks} sessions={page?.sessions ?? 0} />
+              <div className="px-4 py-4" style={{ background: C.card }}>
+                <p className="text-[11px]" style={{ color: C.muted }}>Tempo ativo</p>
+                <p className="mt-1 text-xl font-extrabold tabular-nums" style={{ color: C.text }}>
+                  {page?.activeTimeMin != null ? `${page.activeTimeMin.toFixed(1)} min` : "—"}
+                </p>
+              </div>
             </div>
           </section>
 
@@ -645,6 +648,31 @@ function rampColor(t: number): [number, number, number] {
     Math.round(a[1] + (b[1] - a[1]) * f),
     Math.round(a[2] + (b[2] - a[2]) * f),
   ];
+}
+
+function InsightCard({
+  label,
+  event,
+  sessions,
+}: {
+  label: string;
+  event: SmartEvent | undefined;
+  sessions: number;
+}) {
+  const pct = event && sessions > 0 ? (event.sessions / sessions) * 100 : 0;
+  return (
+    <div className="px-4 py-4" style={{ background: C.card }}>
+      <p className="text-[11px]" style={{ color: C.muted }}>
+        {label}
+      </p>
+      <p className="mt-1 text-xl font-extrabold tabular-nums" style={{ color: C.yellow }}>
+        {event ? `${pct.toFixed(0)}%` : "—"}
+      </p>
+      <p className="text-[11px]" style={{ color: C.muted }}>
+        {event ? `${event.sessions.toLocaleString("pt-BR")} sessões` : ""}
+      </p>
+    </div>
+  );
 }
 
 function HeatmapCanvas({ src, points, max }: { src: string; points: HeatPoint[]; max: number }) {
