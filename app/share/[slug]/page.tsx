@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   Bar,
@@ -262,6 +262,7 @@ export default function SharePage() {
           <DealsView deals={data?.deals ?? null} error={data?.dealsError ?? null} loading={loading} />
         ) : tab === "pagina" ? (
           <ClarityView
+            slug={slug ?? ""}
             page={data?.page ?? null}
             error={data?.pageError ?? null}
             projectId={data?.clarityProjectId ?? null}
@@ -419,17 +420,43 @@ function ShareLogin({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
+type HeatPoint = { x: number; y: number; w: number };
+type HeatmapData = { device: string; total: number; max: number; points: HeatPoint[] };
+
 function ClarityView({
+  slug,
   page,
   error,
   projectId,
   loading,
 }: {
+  slug: string;
   page: ClarityInsights | null;
   error: string | null;
   projectId: string | null;
   loading: boolean;
 }) {
+  const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
+  const [heat, setHeat] = useState<HeatmapData | null>(null);
+  const [heatLoading, setHeatLoading] = useState(false);
+
+  useEffect(() => {
+    if (!slug) return;
+    let active = true;
+    setHeatLoading(true);
+    fetch(`/api/public/${slug}/heatmap?device=${device}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (active) setHeat(j);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setHeatLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [slug, device]);
   if (error) {
     return (
       <div
@@ -506,11 +533,141 @@ function ClarityView({
         </div>
       </section>
 
+      {/* Mapa de calor próprio (embutido) */}
+      <section className="overflow-hidden rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+        <header className="flex flex-wrap items-center justify-between gap-3 px-6 py-4" style={{ borderBottom: `1px solid ${C.line}` }}>
+          <div className="text-[11px] font-bold uppercase tracking-[2px]" style={{ color: C.yellow }}>
+            Mapa de calor de cliques
+            {heat ? <span className="ml-2 font-normal" style={{ color: C.muted }}>· {heat.total} cliques</span> : null}
+          </div>
+          <div className="flex items-center gap-1">
+            {(["desktop", "mobile"] as const).map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDevice(d)}
+                className="rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition"
+                style={device === d ? { background: C.yellow, color: "#1a1500" } : { color: C.muted, border: `1px solid ${C.line}` }}
+              >
+                {d === "desktop" ? "Desktop" : "Mobile"}
+              </button>
+            ))}
+          </div>
+        </header>
+        <div className="p-5">
+          {heatLoading && !heat ? (
+            <div className="flex h-40 items-center justify-center text-sm" style={{ color: C.muted }}>
+              Carregando…
+            </div>
+          ) : heat && heat.total === 0 ? (
+            <div className="flex h-40 items-center justify-center text-center text-sm" style={{ color: C.muted }}>
+              Ainda sem cliques registrados no {device}. Os cliques aparecem aqui conforme as visitas acontecem.
+            </div>
+          ) : (
+            <div className="mx-auto" style={{ maxWidth: device === "mobile" ? 300 : 460 }}>
+              <HeatmapCanvas
+                src={`/heatmap/landing-${device}.png`}
+                points={heat?.points ?? []}
+                max={heat?.max ?? 1}
+              />
+            </div>
+          )}
+        </div>
+      </section>
+
       <p className="text-[11px]" style={{ color: C.muted }}>
-        ⚠️ A API do Clarity entrega apenas os <strong>últimos 3 dias</strong> (agregado). O mapa de
-        calor e as gravações de sessão completas ficam no painel do Clarity (requer acesso). Os dados
-        começaram a contar a partir da instalação.
+        ⚠️ Visitas/sessões vêm do Clarity (apenas os <strong>últimos 3 dias</strong>, agregado). O
+        <strong> mapa de calor é nosso</strong>, montado a partir dos cliques reais na página
+        (começou a contar a partir da instalação). O Clarity detalhado e as gravações ficam no painel
+        do Clarity.
       </p>
+    </div>
+  );
+}
+
+const HEAT_RAMP: Array<[number, number, number]> = [
+  [0, 0, 255],
+  [0, 255, 255],
+  [0, 255, 0],
+  [255, 255, 0],
+  [255, 0, 0],
+];
+
+function rampColor(t: number): [number, number, number] {
+  const clamped = Math.max(0, Math.min(1, t));
+  const seg = clamped * (HEAT_RAMP.length - 1);
+  const i = Math.min(HEAT_RAMP.length - 2, Math.floor(seg));
+  const f = seg - i;
+  const a = HEAT_RAMP[i];
+  const b = HEAT_RAMP[i + 1];
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * f),
+    Math.round(a[1] + (b[1] - a[1]) * f),
+    Math.round(a[2] + (b[2] - a[2]) * f),
+  ];
+}
+
+function HeatmapCanvas({ src, points, max }: { src: string; points: HeatPoint[]; max: number }) {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const draw = useCallback(() => {
+    const img = imgRef.current;
+    const canvas = canvasRef.current;
+    if (!img || !canvas) return;
+    const w = img.clientWidth;
+    const h = img.clientHeight;
+    if (!w || !h) return;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, w, h);
+    if (!points.length) return;
+
+    const radius = Math.max(10, w / 12);
+    for (const p of points) {
+      const intensity = Math.min(1, Math.sqrt(p.w / (max || 1)));
+      const px = p.x * w;
+      const py = p.y * h;
+      const g = ctx.createRadialGradient(px, py, 0, px, py, radius);
+      g.addColorStop(0, `rgba(0,0,0,${intensity})`);
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(px, py, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const d = imgData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const alpha = d[i + 3];
+      if (alpha === 0) continue;
+      const [r, gg, bb] = rampColor(alpha / 255);
+      d[i] = r;
+      d[i + 1] = gg;
+      d[i + 2] = bb;
+      d[i + 3] = Math.min(205, alpha + 35);
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }, [points, max]);
+
+  useEffect(() => {
+    draw();
+  }, [draw]);
+
+  useEffect(() => {
+    const onResize = () => draw();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [draw]);
+
+  return (
+    <div className="relative w-full overflow-hidden rounded-lg" style={{ border: `1px solid ${C.line}` }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img ref={imgRef} src={src} alt="Landing page" onLoad={draw} className="block w-full" />
+      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
     </div>
   );
 }

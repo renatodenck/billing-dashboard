@@ -34,5 +34,21 @@ export const dailySpend = pgTable(
   })
 );
 
+export const pageClicks = pgTable(
+  "page_clicks",
+  {
+    id: serial("id").primaryKey(),
+    slug: text("slug").notNull(),
+    device: text("device").notNull(), // 'desktop' | 'mobile'
+    xRatio: numeric("x_ratio", { precision: 6, scale: 5 }).notNull(),
+    yRatio: numeric("y_ratio", { precision: 6, scale: 5 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    slugDeviceIdx: index("page_clicks_slug_device_idx").on(table.slug, table.device),
+  })
+);
+
 export type Snapshot = typeof snapshots.$inferSelect;
 export type DailySpend = typeof dailySpend.$inferSelect;
+export type PageClick = typeof pageClicks.$inferSelect;

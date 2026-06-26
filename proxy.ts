@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const config = {
   matcher: [
-    "/((?!api/cron|api/public|api/share-login|share|_next/static|_next/image|favicon.ico).*)",
+    "/((?!api/cron|api/public|api/share-login|api/track|share|_next/static|_next/image|favicon.ico).*)",
   ],
 };
 
