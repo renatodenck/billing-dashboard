@@ -13,3 +13,13 @@ export function expectedSession(): string | null {
 export function shareUser(): string {
   return process.env.SHARE_USER?.trim() ?? "";
 }
+
+/**
+ * Embed bypass: a secret key (SHARE_EMBED_KEY) passed as ?key= lets an iframe
+ * skip the cookie login — needed because third-party cookies don't work in a
+ * cross-site iframe. The direct link (no key) still uses the login.
+ */
+export function isShareKeyValid(key: string | null | undefined): boolean {
+  const expected = process.env.SHARE_EMBED_KEY?.trim();
+  return !!expected && !!key && key === expected;
+}

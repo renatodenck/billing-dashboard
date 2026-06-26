@@ -5,7 +5,7 @@ import { fetchTemplateAnalytics, fetchTemplateById } from "@/lib/metaTemplates";
 import { fetchDealsFunnel } from "@/lib/hubspotDeals";
 import { fetchClarityInsights } from "@/lib/clarity";
 import { getSharedTemplate } from "@/lib/sharedTemplates";
-import { expectedSession } from "@/lib/shareAuth";
+import { expectedSession, isShareKeyValid } from "@/lib/shareAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +32,15 @@ export async function GET(
   }
 
   // Optional password gate (only active when SHARE_PASSWORD is configured).
+  // An iframe can bypass it with a valid ?key= (embed token).
   const expected = expectedSession();
   if (expected) {
-    const session = (await cookies()).get("share_session")?.value;
-    if (session !== expected) {
-      return NextResponse.json({ error: "Acesso restrito." }, { status: 401 });
+    const { searchParams } = new URL(req.url);
+    if (!isShareKeyValid(searchParams.get("key"))) {
+      const session = (await cookies()).get("share_session")?.value;
+      if (session !== expected) {
+        return NextResponse.json({ error: "Acesso restrito." }, { status: 401 });
+      }
     }
   }
 

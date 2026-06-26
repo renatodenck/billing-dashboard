@@ -87,6 +87,8 @@ export default function SharePage() {
     setError(null);
     try {
       const params = new URLSearchParams({ since: range.since, until: range.until });
+      const key = new URLSearchParams(window.location.search).get("key");
+      if (key) params.set("key", key);
       const res = await fetch(`/api/public/${slug}?${params}`, { cache: "no-store" });
       if (res.status === 401) {
         setGated(true);
@@ -444,7 +446,9 @@ function ClarityView({
     if (!slug) return;
     let active = true;
     setHeatLoading(true);
-    fetch(`/api/public/${slug}/heatmap?device=${device}`, { cache: "no-store" })
+    const key = new URLSearchParams(window.location.search).get("key");
+    const qs = `device=${device}${key ? `&key=${encodeURIComponent(key)}` : ""}`;
+    fetch(`/api/public/${slug}/heatmap?${qs}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (active) setHeat(j);

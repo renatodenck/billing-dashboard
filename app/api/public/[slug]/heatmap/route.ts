@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { pageClicks } from "@/db/schema";
 import { getSharedTemplate } from "@/lib/sharedTemplates";
-import { expectedSession } from "@/lib/shareAuth";
+import { expectedSession, isShareKeyValid } from "@/lib/shareAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -17,16 +17,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
     return NextResponse.json({ error: "Painel não encontrado." }, { status: 404 });
   }
 
-  // Same gate as the rest of the share page.
+  const { searchParams } = new URL(req.url);
+
+  // Same gate as the rest of the share page (embed token bypasses it).
   const expected = expectedSession();
-  if (expected) {
+  if (expected && !isShareKeyValid(searchParams.get("key"))) {
     const session = (await cookies()).get("share_session")?.value;
     if (session !== expected) {
       return NextResponse.json({ error: "Acesso restrito." }, { status: 401 });
     }
   }
 
-  const device = new URL(req.url).searchParams.get("device") === "mobile" ? "mobile" : "desktop";
+  const device = searchParams.get("device") === "mobile" ? "mobile" : "desktop";
 
   const rows = await db
     .select({ x: pageClicks.xRatio, y: pageClicks.yRatio })
