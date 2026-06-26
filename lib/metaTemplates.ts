@@ -89,6 +89,25 @@ export async function listTemplates(token: string, wabaId: string): Promise<Temp
   }));
 }
 
+/** Fetch a single template by its ID (name, status, preview). */
+export async function fetchTemplateById(
+  token: string,
+  templateId: string
+): Promise<TemplateSummary> {
+  const tokenParam = encodeURIComponent(token);
+  const fields = "name,id,status,category,language,components";
+  const url = `${GRAPH}/${templateId.trim()}?fields=${fields}&access_token=${tokenParam}`;
+  const t = await fetchJson<GraphTemplate>(url);
+  return {
+    id: t.id,
+    name: t.name,
+    status: t.status,
+    category: t.category,
+    language: t.language,
+    preview: buildPreview(t.components),
+  };
+}
+
 export type TemplateDailyPoint = {
   day: string;
   sent: number;
