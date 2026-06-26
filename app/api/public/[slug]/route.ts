@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { getAccount } from "@/lib/metaAccounts";
 import { fetchTemplateAnalytics, fetchTemplateById } from "@/lib/metaTemplates";
 import { fetchDealsFunnel } from "@/lib/hubspotDeals";
 import { getSharedTemplate } from "@/lib/sharedTemplates";
+import { expectedSession } from "@/lib/shareAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +28,15 @@ export async function GET(
   const shared = getSharedTemplate(slug);
   if (!shared) {
     return NextResponse.json({ error: "Painel não encontrado." }, { status: 404 });
+  }
+
+  // Optional password gate (only active when SHARE_PASSWORD is configured).
+  const expected = expectedSession();
+  if (expected) {
+    const session = (await cookies()).get("share_session")?.value;
+    if (session !== expected) {
+      return NextResponse.json({ error: "Acesso restrito." }, { status: 401 });
+    }
   }
 
   const account = getAccount(shared.accountKey);

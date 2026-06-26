@@ -67,6 +67,7 @@ export default function SharePage() {
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [gated, setGated] = useState(false);
   const [preset, setPreset] = useState<RangePreset>("7d");
   const [tab, setTab] = useState<TabKey>("whatsapp");
   const [customRange, setCustomRange] = useState<DateRange>(() => {
@@ -83,8 +84,14 @@ export default function SharePage() {
     try {
       const params = new URLSearchParams({ since: range.since, until: range.until });
       const res = await fetch(`/api/public/${slug}?${params}`, { cache: "no-store" });
+      if (res.status === 401) {
+        setGated(true);
+        setData(null);
+        return;
+      }
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      setGated(false);
       setData(json as Payload);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -97,6 +104,10 @@ export default function SharePage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  if (gated) {
+    return <ShareLogin onSuccess={load} />;
+  }
 
   const a = data?.analytics;
   const t = a?.totals;
@@ -301,6 +312,97 @@ export default function SharePage() {
           The Best Speaker Brasil · Profissionais SA
         </footer>
       </main>
+    </div>
+  );
+}
+
+function ShareLogin({ onSuccess }: { onSuccess: () => void }) {
+  const [user, setUser] = useState("");
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/share-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user, password }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error ?? "Não foi possível entrar.");
+      }
+      onSuccess();
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : String(e2));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center px-6" style={{ background: C.bg, color: C.text }}>
+      <form
+        onSubmit={submit}
+        className="w-full max-w-sm rounded-2xl p-7"
+        style={{ background: C.card, border: `1px solid ${C.line}` }}
+      >
+        <div
+          className="flex items-center gap-1 text-[12px] font-extrabold uppercase"
+          style={{ letterSpacing: "3px" }}
+        >
+          <span>The Best Speaker</span>
+          <span style={{ color: C.red }}>•</span>
+          <span>Brasil</span>
+        </div>
+        <h1 className="mt-4 text-xl font-extrabold">Acesso ao painel</h1>
+        <p className="mt-1 text-sm" style={{ color: C.muted }}>
+          Informe o login e a senha para visualizar.
+        </p>
+
+        <label className="mt-5 block text-[10px] font-bold uppercase tracking-[1.5px]" style={{ color: C.muted }}>
+          Login
+        </label>
+        <input
+          type="text"
+          value={user}
+          autoComplete="username"
+          onChange={(e) => setUser(e.target.value)}
+          className="mt-1 w-full rounded-md px-3 py-2 text-sm outline-none"
+          style={{ background: C.card2, border: `1px solid ${C.line}`, color: C.text }}
+        />
+
+        <label className="mt-4 block text-[10px] font-bold uppercase tracking-[1.5px]" style={{ color: C.muted }}>
+          Senha
+        </label>
+        <input
+          type="password"
+          value={password}
+          autoComplete="current-password"
+          onChange={(e) => setPassword(e.target.value)}
+          className="mt-1 w-full rounded-md px-3 py-2 text-sm outline-none"
+          style={{ background: C.card2, border: `1px solid ${C.line}`, color: C.text }}
+        />
+
+        {err && (
+          <p className="mt-3 text-sm" style={{ color: "#ffb3b0" }}>
+            {err}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={busy}
+          className="mt-6 w-full rounded-md py-2.5 text-sm font-extrabold uppercase tracking-wide transition disabled:opacity-60"
+          style={{ background: C.yellow, color: "#1a1500" }}
+        >
+          {busy ? "Entrando…" : "Entrar"}
+        </button>
+      </form>
     </div>
   );
 }
