@@ -88,11 +88,13 @@ export async function fetchDealsFunnel(
   } while (after);
 
   const { closed, abandoned, waiting, lost } = cfg.stages;
+  const excluded = new Set(cfg.excludeDealIds ?? []);
   const totals = { closed: 0, abandoned: 0, waiting: 0, lost: 0, revenue: 0 };
   const salesByDay = new Map<string, { closed: number; abandoned: number; waiting: number }>();
   const revenueByDay = new Map<string, number>();
 
   for (const d of deals) {
+    if (excluded.has(d.id)) continue; // skip test/internal deals
     const p = d.properties;
     const stage = p.dealstage ?? "";
     const created = p.createdate;

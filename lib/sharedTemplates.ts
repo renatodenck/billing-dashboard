@@ -9,6 +9,8 @@ export type DealsConfig = {
   amountProperty: string;
   paymentDateProperty: string;
   stages: { closed: string; abandoned: string; waiting: string; lost: string };
+  /** Deal IDs to ignore in the funnel (e.g. internal test purchases). */
+  excludeDealIds?: string[];
 };
 
 export type SharedTemplate = {
@@ -40,6 +42,10 @@ export const SHARED_TEMPLATES: SharedTemplate[] = [
         waiting: "1372708679", // Aguardando Pagamento
         lost: "1372708684", // Negócio perdido
       },
+      excludeDealIds: [
+        "61560794636", // "Marcio" — venda de teste (R$ 20,69)
+        "61651362152", // "teste kiwify" — abandono de teste
+      ],
     },
   },
 ];
