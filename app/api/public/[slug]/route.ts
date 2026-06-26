@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { eq } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { kvCache } from "@/db/schema";
 import { getAccount } from "@/lib/metaAccounts";
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 // Clarity's Data Export API allows only ~10 calls/day per project, so cache
 // the result and refresh at most every few hours; serve stale on failure.
-const CLARITY_TTL_MS = 6 * 60 * 60 * 1000;
+const CLARITY_TTL_MS = 3 * 60 * 60 * 1000;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ALLOWED_PRESETS = new Set(["7d", "30d", "60d"]);
@@ -91,11 +91,32 @@ export async function GET(
     if (shared.clarityProjectId && clarityToken) {
       const cacheKey = `clarity:${shared.clarityProjectId}`;
       const [cached] = await db.select().from(kvCache).where(eq(kvCache.key, cacheKey)).limit(1);
-      const fresh =
-        cached && Date.now() - new Date(cached.updatedAt).getTime() < CLARITY_TTL_MS;
-      if (fresh) {
+      const fresh = cached && Date.now() - new Date(cached.updatedAt).getTime() < CLARITY_TTL_MS;
+
+      if (cached && fresh) {
         page = cached.value as ClarityInsights;
+      } else if (cached) {
+        // Stale: atomically "claim" the refresh so concurrent requests don't all
+        // hit Clarity at once (which would burn the daily quota). Only the request
+        // whose conditional UPDATE wins actually fetches; the rest serve stale.
+        const staleBefore = new Date(Date.now() - CLARITY_TTL_MS);
+        const claimed = await db
+          .update(kvCache)
+          .set({ updatedAt: new Date() })
+          .where(and(eq(kvCache.key, cacheKey), lt(kvCache.updatedAt, staleBefore)))
+          .returning({ key: kvCache.key });
+        if (claimed.length === 0) {
+          page = cached.value as ClarityInsights; // someone else is refreshing
+        } else {
+          try {
+            page = await fetchClarityInsights(clarityToken);
+            await db.update(kvCache).set({ value: page, updatedAt: new Date() }).where(eq(kvCache.key, cacheKey));
+          } catch {
+            page = cached.value as ClarityInsights; // serve stale on rate-limit/error
+          }
+        }
       } else {
+        // Cold start: no cache yet.
         try {
           page = await fetchClarityInsights(clarityToken);
           await db
@@ -103,11 +124,7 @@ export async function GET(
             .values({ key: cacheKey, value: page, updatedAt: new Date() })
             .onConflictDoUpdate({ target: kvCache.key, set: { value: page, updatedAt: new Date() } });
         } catch (err) {
-          if (cached) {
-            page = cached.value as ClarityInsights; // serve stale on rate-limit/error
-          } else {
-            pageError = err instanceof Error ? err.message : String(err);
-          }
+          pageError = err instanceof Error ? err.message : String(err);
         }
       }
     }
