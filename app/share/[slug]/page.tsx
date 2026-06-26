@@ -50,7 +50,7 @@ const DEAL_SERIES = [
   { key: "waiting", label: "Aguardando pagamento", color: "#8b87a8" },
 ] as const;
 
-type TabKey = "whatsapp" | "negocios" | "pagina";
+type TabKey = "geral" | "whatsapp" | "negocios" | "pagina";
 
 type Payload = {
   title: string;
@@ -62,6 +62,7 @@ type Payload = {
   page: ClarityInsights | null;
   pageError: string | null;
   clarityProjectId: string | null;
+  usdToBrl: number;
 };
 
 export default function SharePage() {
@@ -73,7 +74,7 @@ export default function SharePage() {
   const [error, setError] = useState<string | null>(null);
   const [gated, setGated] = useState(false);
   const [preset, setPreset] = useState<RangePreset>("7d");
-  const [tab, setTab] = useState<TabKey>("whatsapp");
+  const [tab, setTab] = useState<TabKey>("geral");
   const [customRange, setCustomRange] = useState<DateRange>(() => {
     const today = new Date().toISOString().slice(0, 10);
     return { since: today, until: today };
@@ -180,6 +181,7 @@ export default function SharePage() {
       <div style={{ borderBottom: `1px solid ${C.line}`, background: C.bg }}>
         <div className="mx-auto flex max-w-5xl gap-1 px-6">
           {([
+            { key: "geral", label: "Visão Geral" },
             { key: "whatsapp", label: "WhatsApp" },
             { key: "negocios", label: "Negócios" },
             { key: "pagina", label: "Página" },
@@ -260,7 +262,9 @@ export default function SharePage() {
           </div>
         )}
 
-        {tab === "negocios" ? (
+        {tab === "geral" ? (
+          <OverviewView data={data} loading={loading} />
+        ) : tab === "negocios" ? (
           <DealsView deals={data?.deals ?? null} error={data?.dealsError ?? null} loading={loading} />
         ) : tab === "pagina" ? (
           <ClarityView
@@ -424,6 +428,108 @@ function ShareLogin({ onSuccess }: { onSuccess: () => void }) {
 
 type HeatPoint = { x: number; y: number; w: number };
 type HeatmapData = { device: string; total: number; max: number; points: HeatPoint[] };
+
+function OverviewView({ data, loading }: { data: Payload | null; loading: boolean }) {
+  if (loading && !data) {
+    return (
+      <div className="flex h-64 items-center justify-center text-sm" style={{ color: C.muted }}>
+        Carregando…
+      </div>
+    );
+  }
+
+  const a = data?.analytics;
+  const deals = data?.deals;
+  const page = data?.page;
+  const fx = data?.usdToBrl ?? 5;
+
+  // WhatsApp cost is in the account currency (USD for this WABA) → convert to BRL.
+  const costNative = a?.totals.amountSpent ?? 0;
+  const costBRL = a?.currency === "BRL" ? costNative : costNative * fx;
+
+  const revenue = deals?.totals.revenue ?? 0; // BRL
+  const sales = deals?.totals.closed ?? 0;
+  const ticket = sales > 0 ? revenue / sales : null;
+  const cac = sales > 0 ? costBRL / sales : null;
+  const roas = costBRL > 0 ? revenue / costBRL : null;
+  const result = revenue - costBRL;
+
+  const delivered = a?.totals.delivered ?? 0;
+  const clicks = a?.totals.urlButtonClicks ?? 0;
+  const visits = page?.uniqueUsers ?? null;
+
+  const brl = (n: number) => formatMoney(n, "BRL");
+  const pct = (num: number, den: number) => (den > 0 ? `${((num / den) * 100).toFixed(1)}%` : "—");
+
+  const funnel = [
+    { label: "Mensagens entregues", value: delivered, color: "#a78bfa", note: "WhatsApp" },
+    { label: "Cliques no link", value: clicks, color: "#2dd4bf", note: pct(clicks, delivered) + " das entregues" },
+    { label: "Vendas", value: sales, color: "#22c55e", note: pct(sales, clicks) + " dos cliques" },
+  ];
+  const topFunnel = Math.max(delivered, 1);
+
+  return (
+    <div className="space-y-6">
+      {/* KPIs de dinheiro */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <FunnelCard label="Receita" value={brl(revenue)} hint="vendas fechadas" color="#22c55e" />
+        <FunnelCard label="Vendas" value={sales.toLocaleString("pt-BR")} hint="negócios fechados" color={C.text} />
+        <FunnelCard label="Ticket médio" value={ticket != null ? brl(ticket) : "—"} hint="receita ÷ vendas" color={C.text} />
+        <FunnelCard
+          label="ROAS"
+          value={roas != null ? `${roas.toFixed(1)}×` : "—"}
+          hint="receita ÷ custo de mídia"
+          color={roas == null ? C.text : roas >= 1 ? "#22c55e" : C.red}
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <FunnelCard label="Custo de mídia (WhatsApp)" value={brl(costBRL)} hint={a?.currency === "BRL" ? "" : `US$ ${costNative.toFixed(2)} · câmbio ${fx.toFixed(2)}`} color="#f59e0b" />
+        <FunnelCard label="CAC" value={cac != null ? brl(cac) : "—"} hint="custo ÷ vendas" color={C.text} />
+        <FunnelCard
+          label="Resultado (receita − mídia)"
+          value={brl(result)}
+          hint="antes de taxas/produto"
+          color={result >= 0 ? "#22c55e" : C.red}
+        />
+        <FunnelCard label="Visitas na landing" value={visits != null ? visits.toLocaleString("pt-BR") : "—"} hint="Clarity · últimos 3 dias" color={C.text} />
+      </div>
+
+      {/* Funil ponta a ponta */}
+      <section className="overflow-hidden rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+        <header className="px-6 py-4" style={{ borderBottom: `1px solid ${C.line}` }}>
+          <div className="text-[11px] font-bold uppercase tracking-[2px]" style={{ color: C.yellow }}>
+            Funil ponta a ponta
+          </div>
+        </header>
+        <div className="space-y-4 p-6">
+          {funnel.map((s) => {
+            const width = (s.value / topFunnel) * 100;
+            return (
+              <div key={s.label}>
+                <div className="mb-1 flex items-center justify-between text-sm">
+                  <span className="font-medium" style={{ color: C.text }}>{s.label}</span>
+                  <span className="tabular-nums" style={{ color: C.muted }}>
+                    {s.value.toLocaleString("pt-BR")} <span className="ml-1">· {s.note}</span>
+                  </span>
+                </div>
+                <div className="h-7 w-full overflow-hidden rounded-md" style={{ background: "rgba(154,154,159,.15)" }}>
+                  <div className="h-full rounded-md transition-all" style={{ width: `${Math.max(width, 2)}%`, background: s.color }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <p className="text-[11px]" style={{ color: C.muted }}>
+        ⚠️ Custo (WhatsApp) e vendas (HubSpot) seguem o período selecionado; <strong>visitas</strong> vêm
+        do Clarity (últimos 3 dias). Custo convertido de US$ para R$ ao câmbio {fx.toFixed(2)}. Resultado é
+        receita menos custo de mídia (não inclui taxas do Kiwify nem custo do produto).
+      </p>
+    </div>
+  );
+}
 
 function ClarityView({
   slug,

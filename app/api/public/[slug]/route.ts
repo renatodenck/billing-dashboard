@@ -140,6 +140,7 @@ export async function GET(
         page,
         pageError,
         clarityProjectId: shared.clarityProjectId ?? null,
+        usdToBrl: Number(process.env.NEXT_PUBLIC_USD_TO_BRL ?? "5") || 5,
       },
       { headers: { "Cache-Control": "no-store" } }
     );
