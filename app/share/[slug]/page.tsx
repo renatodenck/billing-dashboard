@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, RefreshCw } from "lucide-react";
 import { formatDateBR, formatMoney } from "@/lib/format";
 import type { TemplateAnalytics, TemplateSummary } from "@/lib/metaTemplates";
 
@@ -115,6 +115,16 @@ export default function SharePage() {
                 </button>
               );
             })}
+            <button
+              type="button"
+              onClick={load}
+              disabled={loading}
+              className="ml-1 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition disabled:opacity-60"
+              style={{ background: C.yellow, color: "#1a1500" }}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              Atualizar
+            </button>
           </div>
         </div>
       </div>
