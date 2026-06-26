@@ -116,6 +116,16 @@ export type TemplateDailyPoint = {
   responses: number;
 };
 
+export type ButtonClicks = {
+  /** Button label (Meta's button_content), e.g. "Confira". */
+  label: string;
+  kind: "url" | "quick_reply" | "other";
+  /** Total clicks (non-unique). */
+  totalClicks: number;
+  /** Unique clicks (distinct users). */
+  uniqueClicks: number;
+};
+
 export type TemplateAnalytics = {
   currency: string;
   templateId: string;
@@ -133,6 +143,8 @@ export type TemplateAnalytics = {
   readRate: number | null;
   costPerDelivered: number | null;
   costPerUrlClick: number | null;
+  /** Per-button click breakdown (label, total/unique clicks). */
+  buttons: ButtonClicks[];
   daily: TemplateDailyPoint[];
 };
 
@@ -204,6 +216,7 @@ export async function fetchTemplateAnalytics(
   const points = json.template_analytics?.data?.[0]?.data_points ?? [];
 
   const byDay = new Map<string, TemplateDailyPoint>();
+  const buttonMap = new Map<string, ButtonClicks>();
   const totals = {
     sent: 0,
     delivered: 0,
@@ -228,6 +241,24 @@ export async function fetchTemplateAnalytics(
     entry.responses += responses;
     byDay.set(day, entry);
 
+    // Per-button breakdown, keyed by label. unique_* types feed uniqueClicks.
+    for (const c of p.clicked ?? []) {
+      const label = c.button_content ?? "(botão)";
+      const isUnique = c.type.startsWith("unique_");
+      const baseType = c.type.replace(/^unique_/, "");
+      const kind: ButtonClicks["kind"] = baseType.includes("url")
+        ? "url"
+        : baseType.includes("quick_reply")
+          ? "quick_reply"
+          : "other";
+      const key = `${label}|${kind}`;
+      const b = buttonMap.get(key) ?? { label, kind, totalClicks: 0, uniqueClicks: 0 };
+      const count = Number(c.count ?? c.value) || 0;
+      if (isUnique) b.uniqueClicks += count;
+      else b.totalClicks += count;
+      buttonMap.set(key, b);
+    }
+
     totals.sent += sent;
     totals.delivered += delivered;
     totals.read += read;
@@ -237,6 +268,7 @@ export async function fetchTemplateAnalytics(
   }
 
   const daily = Array.from(byDay.values()).sort((a, b) => (a.day < b.day ? -1 : 1));
+  const buttons = Array.from(buttonMap.values()).sort((a, b) => b.totalClicks - a.totalClicks);
 
   return {
     currency: (json.currency || "USD").toUpperCase(),
@@ -245,6 +277,7 @@ export async function fetchTemplateAnalytics(
     readRate: totals.delivered > 0 ? totals.read / totals.delivered : null,
     costPerDelivered: totals.delivered > 0 ? totals.amountSpent / totals.delivered : null,
     costPerUrlClick: totals.urlButtonClicks > 0 ? totals.amountSpent / totals.urlButtonClicks : null,
+    buttons,
     daily,
   };
 }

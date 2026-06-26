@@ -246,6 +246,9 @@ export default function SharePage() {
                 <TrendChart daily={a?.daily ?? []} loading={loading} />
               </div>
             </section>
+
+            {/* Cliques no botão */}
+            <ButtonClicksCard buttons={a?.buttons ?? []} delivered={t?.delivered ?? 0} />
           </div>
         </div>
 
@@ -254,6 +257,65 @@ export default function SharePage() {
         </footer>
       </main>
     </div>
+  );
+}
+
+function ButtonClicksCard({
+  buttons,
+  delivered,
+}: {
+  buttons: TemplateAnalytics["buttons"];
+  delivered: number;
+}) {
+  if (!buttons || buttons.length === 0) return null;
+
+  const typeLabel = (kind: string) =>
+    kind === "url" ? "Clique no site" : kind === "quick_reply" ? "Resposta rápida" : "Botão";
+
+  return (
+    <section
+      className="overflow-hidden rounded-2xl"
+      style={{ background: C.card, border: `1px solid ${C.line}` }}
+    >
+      <header className="px-6 py-4" style={{ borderBottom: `1px solid ${C.line}` }}>
+        <div className="text-[11px] font-bold uppercase tracking-[2px]" style={{ color: C.yellow }}>
+          Cliques no botão
+        </div>
+      </header>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr style={{ color: C.muted }} className="text-[11px] uppercase tracking-wide">
+              <th className="px-6 py-3 font-semibold">Rótulo</th>
+              <th className="px-6 py-3 font-semibold">Tipo</th>
+              <th className="px-6 py-3 text-right font-semibold">Total de cliques</th>
+              <th className="px-6 py-3 text-right font-semibold">Taxa de cliques</th>
+            </tr>
+          </thead>
+          <tbody>
+            {buttons.map((b, i) => {
+              const rate = delivered > 0 ? (b.totalClicks / delivered) * 100 : null;
+              return (
+                <tr key={i} style={{ borderTop: `1px solid ${C.line}` }}>
+                  <td className="px-6 py-3 font-medium" style={{ color: C.text }}>
+                    {b.label}
+                  </td>
+                  <td className="px-6 py-3" style={{ color: C.muted }}>
+                    {typeLabel(b.kind)}
+                  </td>
+                  <td className="px-6 py-3 text-right tabular-nums" style={{ color: C.text }}>
+                    {b.totalClicks.toLocaleString("pt-BR")}
+                  </td>
+                  <td className="px-6 py-3 text-right font-semibold tabular-nums" style={{ color: C.yellow }}>
+                    {rate != null ? `${rate.toFixed(2)}%` : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
