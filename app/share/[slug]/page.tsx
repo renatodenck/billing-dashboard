@@ -535,6 +535,41 @@ function ClarityView({
               <MetricCell label="Cliques c/ erro" value={page?.errorClicks ?? null} />
             </div>
           </section>
+
+          {/* Por dispositivo */}
+          <section className="overflow-hidden rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+            <header className="px-6 py-4" style={{ borderBottom: `1px solid ${C.line}` }}>
+              <div className="text-[11px] font-bold uppercase tracking-[2px]" style={{ color: C.muted }}>
+                Por dispositivo
+              </div>
+            </header>
+            <div className="space-y-3 p-5">
+              {page && page.devices.length > 0 ? (
+                page.devices.map((d) => {
+                  const pct = page.sessions > 0 ? (d.sessions / page.sessions) * 100 : 0;
+                  return (
+                    <div key={d.device}>
+                      <div className="mb-1 flex items-center justify-between text-xs">
+                        <span className="font-medium" style={{ color: C.text }}>
+                          {d.device}
+                        </span>
+                        <span className="tabular-nums" style={{ color: C.muted }}>
+                          {d.sessions.toLocaleString("pt-BR")} sess. · {d.users.toLocaleString("pt-BR")} únicos · {pct.toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="h-2.5 w-full overflow-hidden rounded-md" style={{ background: "rgba(154,154,159,.18)" }}>
+                        <div className="h-full rounded-md" style={{ width: `${Math.max(pct, 2)}%`, background: C.yellow }} />
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-sm" style={{ color: C.muted }}>
+                  Sem dados por dispositivo ainda.
+                </div>
+              )}
+            </div>
+          </section>
         </>
       )}
 

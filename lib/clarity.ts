@@ -1,8 +1,12 @@
 // Microsoft Clarity Data Export API.
 // Limitation (Microsoft's): only the last 1–3 days, whole-project aggregate,
-// no custom date range and no heatmap image (heatmap lives in Clarity's UI).
+// ~10 calls/day, no custom date range and no heatmap image.
+// We request a single call broken down by Device (dimension1) and aggregate
+// the overall totals ourselves, so we still spend only 1 call per refresh.
 
 const CLARITY_API = "https://www.clarity.ms/export-data/api/v1/project-live-insights";
+
+export type DeviceBreakdown = { device: string; sessions: number; users: number };
 
 export type ClarityInsights = {
   numOfDays: number;
@@ -17,22 +21,31 @@ export type ClarityInsights = {
   rageClicks: number;
   quickbackClicks: number;
   errorClicks: number;
+  devices: DeviceBreakdown[];
 };
 
-type Metric = { metricName: string; information: Array<Record<string, unknown>> };
+type Row = Record<string, unknown>;
+type Metric = { metricName: string; information: Row[] };
 
 function num(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-function numOrNull(v: unknown): number | null {
-  if (v == null) return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+
+// The dimension value comes back under a key named after the dimension. Be
+// tolerant about the exact key/casing and normalize to a friendly label.
+function deviceLabel(row: Row): string {
+  const raw =
+    (row.Device ?? row.device ?? row.deviceType ?? row.Dimension ?? "")?.toString().trim() ?? "";
+  const v = raw.toLowerCase();
+  if (v.includes("mobile") || v.includes("phone")) return "Mobile";
+  if (v.includes("tablet")) return "Tablet";
+  if (v.includes("pc") || v.includes("desktop")) return "Desktop";
+  return raw || "Outro";
 }
 
 export async function fetchClarityInsights(token: string, numOfDays = 3): Promise<ClarityInsights> {
-  const res = await fetch(`${CLARITY_API}?numOfDays=${numOfDays}`, {
+  const res = await fetch(`${CLARITY_API}?numOfDays=${numOfDays}&dimension1=Device`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
@@ -41,26 +54,69 @@ export async function fetchClarityInsights(token: string, numOfDays = 3): Promis
     throw new Error(`Clarity API ${res.status}: ${text}`);
   }
   const data = (await res.json()) as Metric[];
-  const first = (name: string): Record<string, unknown> =>
-    data.find((m) => m.metricName === name)?.information?.[0] ?? {};
-  const subTotal = (name: string): number => num(first(name).subTotal);
+  const rows = (name: string): Row[] => data.find((m) => m.metricName === name)?.information ?? [];
 
-  const traffic = first("Traffic");
-  const scroll = first("ScrollDepth");
-  const eng = first("EngagementTime");
+  // Traffic per device → device breakdown + summed totals.
+  const trafficRows = rows("Traffic");
+  const sessionsByDevice = new Map<string, number>();
+  let sessions = 0;
+  let bots = 0;
+  let uniqueUsers = 0;
+  let ppsWeighted = 0;
+  const devices: DeviceBreakdown[] = [];
+  for (const r of trafficRows) {
+    const label = deviceLabel(r);
+    const s = num(r.totalSessionCount);
+    const u = num(r.distinctUserCount);
+    sessions += s;
+    bots += num(r.totalBotSessionCount);
+    uniqueUsers += u;
+    ppsWeighted += num(r.pagesPerSessionPercentage) * s;
+    sessionsByDevice.set(label, (sessionsByDevice.get(label) ?? 0) + s);
+    const existing = devices.find((d) => d.device === label);
+    if (existing) {
+      existing.sessions += s;
+      existing.users += u;
+    } else {
+      devices.push({ device: label, sessions: s, users: u });
+    }
+  }
+  devices.sort((a, b) => b.sessions - a.sessions);
+
+  // Scroll depth: session-weighted average across devices.
+  let scrollWeighted = 0;
+  let scrollWeight = 0;
+  for (const r of rows("ScrollDepth")) {
+    const w = sessionsByDevice.get(deviceLabel(r)) ?? 0;
+    const sd = Number(r.averageScrollDepth);
+    if (Number.isFinite(sd) && w > 0) {
+      scrollWeighted += sd * w;
+      scrollWeight += w;
+    }
+  }
+
+  // Engagement and click-quality metrics: sum across device rows.
+  let totalTime = 0;
+  let activeTime = 0;
+  for (const r of rows("EngagementTime")) {
+    totalTime += num(r.totalTime);
+    activeTime += num(r.activeTime);
+  }
+  const sumSub = (name: string) => rows(name).reduce((acc, r) => acc + num(r.subTotal), 0);
 
   return {
     numOfDays,
-    sessions: num(traffic.totalSessionCount),
-    bots: num(traffic.totalBotSessionCount),
-    uniqueUsers: num(traffic.distinctUserCount),
-    pagesPerSession: numOrNull(traffic.pagesPerSessionPercentage),
-    avgScrollDepth: numOrNull(scroll.averageScrollDepth),
-    totalTimeMin: numOrNull(eng.totalTime),
-    activeTimeMin: numOrNull(eng.activeTime),
-    deadClicks: subTotal("DeadClickCount"),
-    rageClicks: subTotal("RageClickCount"),
-    quickbackClicks: subTotal("QuickbackClick"),
-    errorClicks: subTotal("ErrorClickCount"),
+    sessions,
+    bots,
+    uniqueUsers,
+    pagesPerSession: sessions > 0 ? ppsWeighted / sessions : null,
+    avgScrollDepth: scrollWeight > 0 ? scrollWeighted / scrollWeight : null,
+    totalTimeMin: totalTime > 0 ? totalTime : null,
+    activeTimeMin: activeTime > 0 ? activeTime : null,
+    deadClicks: sumSub("DeadClickCount"),
+    rageClicks: sumSub("RageClickCount"),
+    quickbackClicks: sumSub("QuickbackClick"),
+    errorClicks: sumSub("ErrorClickCount"),
+    devices,
   };
 }
