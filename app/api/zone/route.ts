@@ -15,6 +15,7 @@ export async function OPTIONS() {
 }
 
 // Receives click pings from the landing page (cross-origin, via sendBeacon).
+// Named neutrally (not "track") to avoid ad/privacy blockers dropping the call.
 export async function POST(req: Request) {
   try {
     const text = await req.text();
