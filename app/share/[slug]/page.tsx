@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { ExternalLink, RefreshCw } from "lucide-react";
 import { formatDateBR, formatMoney } from "@/lib/format";
+import { PRESET_LABELS, presetToRange, type DateRange, type RangePreset } from "@/lib/dateRange";
 import type { TemplateAnalytics, TemplateSummary } from "@/lib/metaTemplates";
 
 // 50 Palestras / The Best Speaker brand palette (from the landing page).
@@ -36,11 +37,7 @@ const SERIES = [
   { key: "responses", label: "Respostas únicas", color: "#34d399" },
 ] as const;
 
-const PRESETS = [
-  { key: "7d", label: "7 dias" },
-  { key: "30d", label: "30 dias" },
-  { key: "60d", label: "60 dias" },
-] as const;
+const PRESET_ORDER: RangePreset[] = ["today", "yesterday", "7d", "30d", "60d", "custom"];
 
 type Payload = {
   title: string;
@@ -56,14 +53,21 @@ export default function SharePage() {
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [preset, setPreset] = useState<string>("7d");
+  const [preset, setPreset] = useState<RangePreset>("7d");
+  const [customRange, setCustomRange] = useState<DateRange>(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return { since: today, until: today };
+  });
+
+  const range = presetToRange(preset, customRange, []);
 
   const load = useCallback(async () => {
     if (!slug) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/public/${slug}?preset=${preset}`, { cache: "no-store" });
+      const params = new URLSearchParams({ since: range.since, until: range.until });
+      const res = await fetch(`/api/public/${slug}?${params}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
       setData(json as Payload);
@@ -73,7 +77,7 @@ export default function SharePage() {
     } finally {
       setLoading(false);
     }
-  }, [slug, preset]);
+  }, [slug, range.since, range.until]);
 
   useEffect(() => {
     load();
@@ -96,36 +100,16 @@ export default function SharePage() {
             <span style={{ color: C.red }}>•</span>
             <span>Brasil</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            {PRESETS.map((p) => {
-              const active = preset === p.key;
-              return (
-                <button
-                  key={p.key}
-                  type="button"
-                  onClick={() => setPreset(p.key)}
-                  className="rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition"
-                  style={
-                    active
-                      ? { background: C.yellow, color: "#1a1500" }
-                      : { color: C.muted, border: `1px solid ${C.line}` }
-                  }
-                >
-                  {p.label}
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              onClick={load}
-              disabled={loading}
-              className="ml-1 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition disabled:opacity-60"
-              style={{ background: C.yellow, color: "#1a1500" }}
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-              Atualizar
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wide transition disabled:opacity-60"
+            style={{ background: C.yellow, color: "#1a1500" }}
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Atualizar
+          </button>
         </div>
       </div>
 
@@ -161,6 +145,53 @@ export default function SharePage() {
       </div>
 
       <main className="mx-auto max-w-5xl px-6 py-8">
+        {/* Filtros de período */}
+        <div
+          className="mb-6 rounded-2xl p-4"
+          style={{ background: C.card, border: `1px solid ${C.line}` }}
+        >
+          <div className="flex flex-wrap items-center gap-1.5">
+            {PRESET_ORDER.map((p) => {
+              const active = preset === p;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPreset(p)}
+                  className="rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition"
+                  style={
+                    active
+                      ? { background: C.yellow, color: "#1a1500" }
+                      : { color: C.muted, border: `1px solid ${C.line}` }
+                  }
+                >
+                  {PRESET_LABELS[p]}
+                </button>
+              );
+            })}
+          </div>
+
+          {preset === "custom" && (
+            <div
+              className="mt-4 flex flex-wrap items-end gap-3 pt-4"
+              style={{ borderTop: `1px solid ${C.line}` }}
+            >
+              <DateField
+                label="De"
+                value={customRange.since}
+                max={customRange.until}
+                onChange={(v) => setCustomRange((r) => ({ ...r, since: v }))}
+              />
+              <DateField
+                label="Até"
+                value={customRange.until}
+                min={customRange.since}
+                onChange={(v) => setCustomRange((r) => ({ ...r, until: v }))}
+              />
+            </div>
+          )}
+        </div>
+
         {error && (
           <div
             className="mb-6 rounded-xl px-4 py-3 text-sm"
@@ -222,6 +253,42 @@ export default function SharePage() {
           The Best Speaker Brasil · Profissionais SA
         </footer>
       </main>
+    </div>
+  );
+}
+
+function DateField({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  min?: string;
+  max?: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <label className="block text-[10px] font-bold uppercase tracking-[1.5px]" style={{ color: C.muted }}>
+        {label}
+      </label>
+      <input
+        type="date"
+        value={value}
+        min={min}
+        max={max}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 rounded-md px-3 py-1.5 text-sm outline-none"
+        style={{
+          background: C.card2,
+          border: `1px solid ${C.line}`,
+          color: C.text,
+          colorScheme: "dark",
+        }}
+      />
     </div>
   );
 }
