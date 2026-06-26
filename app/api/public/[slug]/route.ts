@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAccount } from "@/lib/metaAccounts";
 import { fetchTemplateAnalytics, fetchTemplateById } from "@/lib/metaTemplates";
+import { fetchDealsFunnel } from "@/lib/hubspotDeals";
 import { getSharedTemplate } from "@/lib/sharedTemplates";
 
 export const dynamic = "force-dynamic";
@@ -47,8 +48,21 @@ export async function GET(
       fetchTemplateById(account.token, shared.templateId),
       fetchTemplateAnalytics(account.token, account.wabaId, shared.templateId, since, until),
     ]);
+
+    // Optional deals funnel (HubSpot). A failure here must not break the page.
+    let deals = null;
+    let dealsError: string | null = null;
+    const hubspotToken = process.env.HUBSPOT_TOKEN?.trim();
+    if (shared.deals && hubspotToken) {
+      try {
+        deals = await fetchDealsFunnel(hubspotToken, shared.deals, since, until);
+      } catch (err) {
+        dealsError = err instanceof Error ? err.message : String(err);
+      }
+    }
+
     return NextResponse.json(
-      { title: shared.title, subtitle: shared.subtitle, template, analytics },
+      { title: shared.title, subtitle: shared.subtitle, template, analytics, deals, dealsError },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {
