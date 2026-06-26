@@ -126,7 +126,8 @@ export type TemplateAnalytics = {
   daily: TemplateDailyPoint[];
 };
 
-type ClickedEntry = { type: string; value: number };
+// Meta returns clicked entries as { type, button_content, count } — NOT `value`.
+type ClickedEntry = { type: string; button_content?: string; count?: number; value?: number };
 type CostEntry = { type: string; value: number };
 type AnalyticsDataPoint = {
   template_id: string;
@@ -149,7 +150,7 @@ function sumClicked(clicked: ClickedEntry[] | undefined, ...types: string[]): nu
   if (!clicked) return 0;
   return clicked
     .filter((c) => types.includes(c.type))
-    .reduce((s, c) => s + (Number(c.value) || 0), 0);
+    .reduce((s, c) => s + (Number(c.count ?? c.value) || 0), 0);
 }
 
 function pickCost(cost: CostEntry[] | undefined, type: string): number {
@@ -172,9 +173,12 @@ export async function fetchTemplateAnalytics(
   const id = wabaId.trim();
   const tokenParam = encodeURIComponent(token);
 
-  // BRT (UTC-3) day boundaries → unix seconds. `end` is exclusive of the next day.
+  // BRT (UTC-3) day boundaries → unix seconds. `end` covers the whole `until`
+  // day (next-day midnight), but is capped at "now" — Meta rejects an end time
+  // in the future ("End time must be within the query period of the last 90 days").
   const startSec = Math.floor(new Date(`${since}T00:00:00-03:00`).getTime() / 1000);
-  const endSec = Math.floor(new Date(`${until}T00:00:00-03:00`).getTime() / 1000) + 24 * 60 * 60;
+  const untilEnd = Math.floor(new Date(`${until}T00:00:00-03:00`).getTime() / 1000) + 24 * 60 * 60;
+  const endSec = Math.min(untilEnd, Math.floor(Date.now() / 1000));
 
   // metric_types enums MUST be quoted in the field-expansion syntax, or Meta
   // rejects them with "(#100) The parameter metric_types must be an array."
