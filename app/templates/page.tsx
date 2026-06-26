@@ -20,6 +20,7 @@ import {
   type RangePreset,
 } from "@/lib/dateRange";
 import type { TemplateAnalytics, TemplateSummary } from "@/lib/metaTemplates";
+import type { AccountOption } from "@/lib/metaAccounts";
 
 const PRESET_ORDER: RangePreset[] = ["today", "yesterday", "7d", "30d", "60d", "custom"];
 
@@ -34,6 +35,8 @@ const SERIES = [
 type TabKey = "trend" | "funnel";
 
 export default function TemplatesPage() {
+  const [accounts, setAccounts] = useState<AccountOption[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState<string>("");
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [analytics, setAnalytics] = useState<TemplateAnalytics | null>(null);
@@ -57,21 +60,51 @@ export default function TemplatesPage() {
     [templates, selectedId]
   );
 
-  // Load the template list once.
+  // Load the configured accounts once, then default to the first.
   useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/accounts", { cache: "no-store" });
+        const json = await res.json();
+        if (!active) return;
+        const list: AccountOption[] = json.accounts ?? [];
+        setAccounts(list);
+        setSelectedAccount(list[0]?.key ?? "");
+        if (list.length === 0) setLoadingList(false);
+      } catch (err) {
+        if (active) {
+          setListError(err instanceof Error ? err.message : String(err));
+          setLoadingList(false);
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Load templates whenever the selected account changes.
+  useEffect(() => {
+    if (!selectedAccount) return;
     let active = true;
     (async () => {
       setLoadingList(true);
       setListError(null);
+      setTemplates([]);
+      setSelectedId("");
+      setAnalytics(null);
       try {
-        const res = await fetch("/api/templates", { cache: "no-store" });
+        const res = await fetch(`/api/templates?account=${encodeURIComponent(selectedAccount)}`, {
+          cache: "no-store",
+        });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
         if (!active) return;
         const list: TemplateSummary[] = json.templates ?? [];
         setTemplates(list);
         const preferred =
-          list.find((t) => /palestra/i.test(t.name)) ??
+          list.find((t) => /palestra|^50_/i.test(t.name)) ??
           list.find((t) => t.status === "APPROVED") ??
           list[0];
         setSelectedId(preferred?.id ?? "");
@@ -84,14 +117,15 @@ export default function TemplatesPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [selectedAccount]);
 
   const loadAnalytics = useCallback(async () => {
-    if (!selectedId) return;
+    if (!selectedId || !selectedAccount) return;
     setLoadingData(true);
     setDataError(null);
     try {
       const params = new URLSearchParams({
+        account: selectedAccount,
         templateId: selectedId,
         since: range.since,
         until: range.until,
@@ -106,7 +140,7 @@ export default function TemplatesPage() {
     } finally {
       setLoadingData(false);
     }
-  }, [selectedId, range.since, range.until]);
+  }, [selectedAccount, selectedId, range.since, range.until]);
 
   useEffect(() => {
     loadAnalytics();
@@ -147,6 +181,24 @@ export default function TemplatesPage() {
         {/* Controls */}
         <div className="mb-6 rounded-2xl border border-psa-line bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-end gap-4">
+            <div className="min-w-[200px]">
+              <label className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-psa-muted">
+                Conta (WhatsApp)
+              </label>
+              <select
+                value={selectedAccount}
+                disabled={accounts.length === 0}
+                onChange={(e) => setSelectedAccount(e.target.value)}
+                className="mt-1 w-full rounded-md border border-psa-line bg-white px-3 py-2 text-sm text-psa-ink focus:border-psa-orange focus:outline-none disabled:opacity-50"
+              >
+                {accounts.length === 0 && <option>—</option>}
+                {accounts.map((a) => (
+                  <option key={a.key} value={a.key}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="min-w-[260px] flex-1">
               <label className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-psa-muted">
                 Modelo de mensagem

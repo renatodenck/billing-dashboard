@@ -1,22 +1,22 @@
 import { NextResponse } from "next/server";
-import { fetchTemplateAnalytics, resolveToken, resolveWabaId } from "@/lib/metaTemplates";
+import { getAccount } from "@/lib/metaAccounts";
+import { fetchTemplateAnalytics } from "@/lib/metaTemplates";
 
 export const dynamic = "force-dynamic";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET(req: Request) {
-  const token = resolveToken();
-  const wabaId = resolveWabaId();
+  const { searchParams } = new URL(req.url);
+  const account = getAccount(searchParams.get("account"));
 
-  if (!token || !wabaId) {
+  if (!account) {
     return NextResponse.json(
-      { error: "META_ACCESS_TOKEN ou META_WABA_ID/META_AD_ACCOUNT_ID não configurados." },
+      { error: "Nenhuma conta Meta configurada (token + WABA ID)." },
       { status: 400 }
     );
   }
 
-  const { searchParams } = new URL(req.url);
   const templateId = searchParams.get("templateId")?.trim();
   const since = searchParams.get("since")?.trim();
   const until = searchParams.get("until")?.trim();
@@ -32,7 +32,13 @@ export async function GET(req: Request) {
   }
 
   try {
-    const analytics = await fetchTemplateAnalytics(token, wabaId, templateId, since, until);
+    const analytics = await fetchTemplateAnalytics(
+      account.token,
+      account.wabaId,
+      templateId,
+      since,
+      until
+    );
     return NextResponse.json(analytics, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

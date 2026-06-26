@@ -2,15 +2,6 @@ import { brDay } from "./format";
 
 const GRAPH = "https://graph.facebook.com/v22.0";
 
-/** Resolve the b2c WABA id the same way the cron capture does. */
-export function resolveWabaId(): string | undefined {
-  return process.env.META_WABA_ID?.trim() ?? process.env.META_AD_ACCOUNT_ID?.trim();
-}
-
-export function resolveToken(): string | undefined {
-  return process.env.META_ACCESS_TOKEN?.trim();
-}
-
 export type TemplateButton = {
   type: string;
   text: string;
