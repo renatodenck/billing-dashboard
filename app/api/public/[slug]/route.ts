@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { kvCache } from "@/db/schema";
 import { getAccount } from "@/lib/metaAccounts";
 import { fetchTemplateAnalytics, fetchTemplateById } from "@/lib/metaTemplates";
 import { fetchDealsFunnel } from "@/lib/hubspotDeals";
-import { fetchClarityInsights } from "@/lib/clarity";
+import { fetchClarityInsights, type ClarityInsights } from "@/lib/clarity";
 import { getSharedTemplate } from "@/lib/sharedTemplates";
 import { expectedSession, isShareKeyValid } from "@/lib/shareAuth";
 
 export const dynamic = "force-dynamic";
+
+// Clarity's Data Export API allows only ~10 calls/day per project, so cache
+// the result and refresh at most every few hours; serve stale on failure.
+const CLARITY_TTL_MS = 6 * 60 * 60 * 1000;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ALLOWED_PRESETS = new Set(["7d", "30d", "60d"]);
@@ -77,15 +84,31 @@ export async function GET(
       }
     }
 
-    // Optional landing-page analytics (Microsoft Clarity). Fails soft.
-    let page = null;
+    // Optional landing-page analytics (Microsoft Clarity), cached. Fails soft.
+    let page: ClarityInsights | null = null;
     let pageError: string | null = null;
     const clarityToken = process.env.CLARITY_API_TOKEN?.trim();
     if (shared.clarityProjectId && clarityToken) {
-      try {
-        page = await fetchClarityInsights(clarityToken);
-      } catch (err) {
-        pageError = err instanceof Error ? err.message : String(err);
+      const cacheKey = `clarity:${shared.clarityProjectId}`;
+      const [cached] = await db.select().from(kvCache).where(eq(kvCache.key, cacheKey)).limit(1);
+      const fresh =
+        cached && Date.now() - new Date(cached.updatedAt).getTime() < CLARITY_TTL_MS;
+      if (fresh) {
+        page = cached.value as ClarityInsights;
+      } else {
+        try {
+          page = await fetchClarityInsights(clarityToken);
+          await db
+            .insert(kvCache)
+            .values({ key: cacheKey, value: page, updatedAt: new Date() })
+            .onConflictDoUpdate({ target: kvCache.key, set: { value: page, updatedAt: new Date() } });
+        } catch (err) {
+          if (cached) {
+            page = cached.value as ClarityInsights; // serve stale on rate-limit/error
+          } else {
+            pageError = err instanceof Error ? err.message : String(err);
+          }
+        }
       }
     }
 

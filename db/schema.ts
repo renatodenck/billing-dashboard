@@ -49,6 +49,13 @@ export const pageClicks = pgTable(
   })
 );
 
+// Generic key/value cache (e.g. rate-limited external APIs like Clarity).
+export const kvCache = pgTable("kv_cache", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type Snapshot = typeof snapshots.$inferSelect;
 export type DailySpend = typeof dailySpend.$inferSelect;
 export type PageClick = typeof pageClicks.$inferSelect;

@@ -461,17 +461,7 @@ function ClarityView({
       active = false;
     };
   }, [slug, device]);
-  if (error) {
-    return (
-      <div
-        className="rounded-xl px-4 py-3 text-sm"
-        style={{ background: "rgba(232,49,42,.12)", border: `1px solid ${C.red}`, color: "#ffb3b0" }}
-      >
-        Erro ao carregar dados da página: {error}
-      </div>
-    );
-  }
-  if (loading && !page) {
+  if (loading && !page && !error) {
     return (
       <div className="flex h-64 items-center justify-center text-sm" style={{ color: C.muted }}>
         Carregando…
@@ -510,32 +500,43 @@ function ClarityView({
         )}
       </div>
 
-      {/* Métricas principais */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <FunnelCard label="Visitas únicas" value={page ? fmtInt(page.uniqueUsers) : "—"} hint="usuários distintos" color="#22c55e" />
-        <FunnelCard label="Sessões" value={page ? fmtInt(page.sessions) : "—"} hint={page ? `${fmtInt(page.bots)} de bots` : ""} color={C.text} />
-        <FunnelCard label="Páginas / sessão" value={page?.pagesPerSession != null ? page.pagesPerSession.toFixed(1) : "—"} hint="navegação por visita" color={C.text} />
-        <FunnelCard label="Scroll médio" value={fmtPct(page?.avgScrollDepth ?? null)} hint="profundidade da página" color="#2dd4bf" />
-      </div>
-
-      {/* Engajamento e qualidade de cliques */}
-      <section className="overflow-hidden rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-        <header className="px-6 py-4" style={{ borderBottom: `1px solid ${C.line}` }}>
-          <div className="text-[11px] font-bold uppercase tracking-[2px]" style={{ color: C.muted }}>
-            Cliques e engajamento
-          </div>
-        </header>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" style={{ background: C.line, gap: "1px" }}>
-          <MetricCell
-            label="Tempo ativo (min)"
-            value={page?.activeTimeMin != null ? Number(page.activeTimeMin.toFixed(1)) : null}
-          />
-          <MetricCell label="Cliques mortos" value={page?.deadClicks ?? null} />
-          <MetricCell label="Cliques de raiva" value={page?.rageClicks ?? null} />
-          <MetricCell label="Voltas rápidas" value={page?.quickbackClicks ?? null} />
-          <MetricCell label="Cliques c/ erro" value={page?.errorClicks ?? null} />
+      {error && !page ? (
+        <div
+          className="rounded-xl px-4 py-3 text-sm"
+          style={{ background: "rgba(154,154,159,.10)", border: `1px solid ${C.line}`, color: C.muted }}
+        >
+          Métricas do Clarity indisponíveis no momento{/Exceeded daily limit|429/i.test(error) ? " (limite diário da API atingido — volta a atualizar amanhã)" : ""}. O mapa de calor abaixo segue funcionando.
         </div>
-      </section>
+      ) : (
+        <>
+          {/* Métricas principais */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <FunnelCard label="Visitas únicas" value={page ? fmtInt(page.uniqueUsers) : "—"} hint="usuários distintos" color="#22c55e" />
+            <FunnelCard label="Sessões" value={page ? fmtInt(page.sessions) : "—"} hint={page ? `${fmtInt(page.bots)} de bots` : ""} color={C.text} />
+            <FunnelCard label="Páginas / sessão" value={page?.pagesPerSession != null ? page.pagesPerSession.toFixed(1) : "—"} hint="navegação por visita" color={C.text} />
+            <FunnelCard label="Scroll médio" value={fmtPct(page?.avgScrollDepth ?? null)} hint="profundidade da página" color="#2dd4bf" />
+          </div>
+
+          {/* Engajamento e qualidade de cliques */}
+          <section className="overflow-hidden rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+            <header className="px-6 py-4" style={{ borderBottom: `1px solid ${C.line}` }}>
+              <div className="text-[11px] font-bold uppercase tracking-[2px]" style={{ color: C.muted }}>
+                Cliques e engajamento
+              </div>
+            </header>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" style={{ background: C.line, gap: "1px" }}>
+              <MetricCell
+                label="Tempo ativo (min)"
+                value={page?.activeTimeMin != null ? Number(page.activeTimeMin.toFixed(1)) : null}
+              />
+              <MetricCell label="Cliques mortos" value={page?.deadClicks ?? null} />
+              <MetricCell label="Cliques de raiva" value={page?.rageClicks ?? null} />
+              <MetricCell label="Voltas rápidas" value={page?.quickbackClicks ?? null} />
+              <MetricCell label="Cliques c/ erro" value={page?.errorClicks ?? null} />
+            </div>
+          </section>
+        </>
+      )}
 
       {/* Mapa de calor próprio (embutido) */}
       <section className="overflow-hidden rounded-2xl" style={{ background: C.card, border: `1px solid ${C.line}` }}>
