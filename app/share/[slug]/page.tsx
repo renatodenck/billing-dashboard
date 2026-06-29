@@ -75,6 +75,7 @@ export default function SharePage() {
   const [gated, setGated] = useState(false);
   const [preset, setPreset] = useState<RangePreset>("7d");
   const [tab, setTab] = useState<TabKey>("geral");
+  const [clarityDays, setClarityDays] = useState<1 | 2 | 3>(3);
   const [customRange, setCustomRange] = useState<DateRange>(() => {
     const today = new Date().toISOString().slice(0, 10);
     return { since: today, until: today };
@@ -88,6 +89,7 @@ export default function SharePage() {
     setError(null);
     try {
       const params = new URLSearchParams({ since: range.since, until: range.until });
+      params.set("clarityDays", String(clarityDays));
       const key = new URLSearchParams(window.location.search).get("key");
       if (key) params.set("key", key);
       const res = await fetch(`/api/public/${slug}?${params}`, { cache: "no-store" });
@@ -106,7 +108,7 @@ export default function SharePage() {
     } finally {
       setLoading(false);
     }
-  }, [slug, range.since, range.until]);
+  }, [slug, range.since, range.until, clarityDays]);
 
   useEffect(() => {
     load();
@@ -207,6 +209,32 @@ export default function SharePage() {
 
       <main className="mx-auto max-w-5xl px-6 py-8">
         {/* Filtros de período */}
+        {tab === "pagina" ? (
+          <div
+            className="mb-6 rounded-2xl p-4"
+            style={{ background: C.card, border: `1px solid ${C.line}` }}
+          >
+            <div className="flex flex-wrap items-center gap-1.5">
+              {([{ d: 1, label: "Hoje" }, { d: 2, label: "Últimos 2 dias" }, { d: 3, label: "Últimos 3 dias" }] as const).map((o) => {
+                const active = clarityDays === o.d;
+                return (
+                  <button
+                    key={o.d}
+                    type="button"
+                    onClick={() => setClarityDays(o.d)}
+                    className="rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition"
+                    style={active ? { background: C.yellow, color: "#1a1500" } : { color: C.muted, border: `1px solid ${C.line}` }}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-3 text-xs" style={{ color: C.muted }}>
+              O Microsoft Clarity disponibiliza apenas os últimos 1 a 3 dias.
+            </p>
+          </div>
+        ) : (
         <div
           className="mb-6 rounded-2xl p-4"
           style={{ background: C.card, border: `1px solid ${C.line}` }}
@@ -252,6 +280,7 @@ export default function SharePage() {
             </div>
           )}
         </div>
+        )}
 
         {error && (
           <div

@@ -66,6 +66,11 @@ export async function GET(
     ({ since, until } = rangeFromPreset(p));
   }
 
+  // Clarity only serves the last 1–3 days, so it has its own day count.
+  const clarityDaysRaw = Number(searchParams.get("clarityDays"));
+  const clarityDays =
+    clarityDaysRaw === 1 || clarityDaysRaw === 2 || clarityDaysRaw === 3 ? clarityDaysRaw : 3;
+
   try {
     const [template, analytics] = await Promise.all([
       fetchTemplateById(account.token, shared.templateId),
@@ -89,7 +94,7 @@ export async function GET(
     let pageError: string | null = null;
     const clarityToken = process.env.CLARITY_API_TOKEN?.trim();
     if (shared.clarityProjectId && clarityToken) {
-      const cacheKey = `clarity:${shared.clarityProjectId}`;
+      const cacheKey = `clarity:${shared.clarityProjectId}:${clarityDays}`;
       const [cached] = await db.select().from(kvCache).where(eq(kvCache.key, cacheKey)).limit(1);
       const fresh = cached && Date.now() - new Date(cached.updatedAt).getTime() < CLARITY_TTL_MS;
 
@@ -109,7 +114,7 @@ export async function GET(
           page = cached.value as ClarityInsights; // someone else is refreshing
         } else {
           try {
-            page = await fetchClarityInsights(clarityToken);
+            page = await fetchClarityInsights(clarityToken, clarityDays);
             await db.update(kvCache).set({ value: page, updatedAt: new Date() }).where(eq(kvCache.key, cacheKey));
           } catch {
             page = cached.value as ClarityInsights; // serve stale on rate-limit/error
@@ -118,7 +123,7 @@ export async function GET(
       } else {
         // Cold start: no cache yet.
         try {
-          page = await fetchClarityInsights(clarityToken);
+          page = await fetchClarityInsights(clarityToken, clarityDays);
           await db
             .insert(kvCache)
             .values({ key: cacheKey, value: page, updatedAt: new Date() })
