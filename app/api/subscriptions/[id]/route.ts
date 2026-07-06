@@ -26,6 +26,7 @@ export async function PATCH(
 
   const set: Record<string, unknown> = { updatedAt: sql`now()` };
   if (parsed.tool !== undefined) set.tool = parsed.tool;
+  if (parsed.team !== undefined) set.team = parsed.team;
   if (parsed.costPerSeat !== undefined) set.costPerSeat = parsed.costPerSeat.toFixed(4);
   if (parsed.seats !== undefined) set.seats = parsed.seats;
   if (parsed.currency !== undefined) set.currency = parsed.currency;

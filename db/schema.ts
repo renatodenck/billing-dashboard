@@ -66,6 +66,8 @@ export const kvCache = pgTable("kv_cache", {
 export const subscriptions = pgTable("subscriptions", {
   id: serial("id").primaryKey(),
   tool: text("tool").notNull(),
+  // Time/área responsável (Vendas, Marketing, IA, Financeiro, RH). Nulo = sem time.
+  team: text("team"),
   costPerSeat: numeric("cost_per_seat", { precision: 14, scale: 4 }).notNull(),
   seats: integer("seats").notNull().default(1),
   currency: text("currency").notNull().default("USD"),

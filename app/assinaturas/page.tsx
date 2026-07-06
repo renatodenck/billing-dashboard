@@ -4,13 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Plus, Pencil, Trash2, Check, X, RefreshCw } from "lucide-react";
 import { formatMoney } from "@/lib/format";
+import { TEAMS } from "@/lib/teams";
 import type { SubscriptionDTO } from "../api/subscriptions/route";
 
 const CURRENCIES = ["USD", "BRL"] as const;
 
-type Draft = { tool: string; costPerSeat: string; seats: string; currency: string; notes: string };
+type Draft = { tool: string; team: string; costPerSeat: string; seats: string; currency: string; notes: string };
 
-const EMPTY_DRAFT: Draft = { tool: "", costPerSeat: "", seats: "1", currency: "USD", notes: "" };
+const EMPTY_DRAFT: Draft = { tool: "", team: "", costPerSeat: "", seats: "1", currency: "USD", notes: "" };
 
 export default function SubscriptionsPage() {
   const [items, setItems] = useState<SubscriptionDTO[]>([]);
@@ -48,9 +49,21 @@ export default function SubscriptionsPage() {
 
   const totalSeats = useMemo(() => items.reduce((s, i) => s + i.seats, 0), [items]);
 
+  const byTeam = useMemo(() => {
+    const m = new Map<string, Map<string, number>>();
+    for (const s of items) {
+      const t = s.team ?? "Sem time";
+      if (!m.has(t)) m.set(t, new Map());
+      const cm = m.get(t)!;
+      cm.set(s.currency, (cm.get(s.currency) ?? 0) + s.monthly);
+    }
+    return [...m.entries()];
+  }, [items]);
+
   function draftToBody(d: Draft) {
     return {
       tool: d.tool.trim(),
+      team: d.team || null,
       costPerSeat: Number(d.costPerSeat.replace(",", ".")),
       seats: Number(d.seats),
       currency: d.currency,
@@ -81,6 +94,7 @@ export default function SubscriptionsPage() {
     setEditingId(s.id);
     setEditDraft({
       tool: s.tool,
+      team: s.team ?? "",
       costPerSeat: String(s.costPerSeat),
       seats: String(s.seats),
       currency: s.currency,
@@ -181,6 +195,30 @@ export default function SubscriptionsPage() {
           </div>
         </div>
 
+        {byTeam.length > 0 && (
+          <div className="mt-6 rounded-2xl border border-psa-line bg-white p-5 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-psa-muted">
+              Total por time
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {byTeam.map(([team, byCur]) => (
+                <div
+                  key={team}
+                  className="flex items-center gap-2 rounded-full border border-psa-line bg-psa-bg/50 px-3 py-1.5"
+                >
+                  <span className="text-xs font-semibold text-psa-ink">{team}</span>
+                  <span className="text-sm font-semibold tabular-nums text-psa-orange">
+                    {[...byCur.entries()]
+                      .map(([cur, total]) => formatMoney(total, cur))
+                      .join(" + ")}
+                    <span className="ml-1 text-[10px] font-normal text-psa-muted">/mês</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
@@ -194,6 +232,7 @@ export default function SubscriptionsPage() {
               <thead>
                 <tr className="border-b border-psa-line text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-psa-muted">
                   <th className="px-4 py-3">Ferramenta</th>
+                  <th className="px-4 py-3">Time</th>
                   <th className="px-4 py-3">Custo/assento</th>
                   <th className="px-4 py-3">Assentos</th>
                   <th className="px-4 py-3">Total/mês</th>
@@ -205,11 +244,11 @@ export default function SubscriptionsPage() {
               <tbody className="divide-y divide-psa-line">
                 {loading && items.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-psa-muted">Carregando…</td>
+                    <td colSpan={8} className="px-4 py-8 text-center text-psa-muted">Carregando…</td>
                   </tr>
                 ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-psa-muted">
+                    <td colSpan={8} className="px-4 py-8 text-center text-psa-muted">
                       Nenhuma assinatura cadastrada ainda. Adicione a primeira abaixo.
                     </td>
                   </tr>
@@ -219,6 +258,12 @@ export default function SubscriptionsPage() {
                       <tr key={s.id} className="bg-psa-orange-soft/30">
                         <td className="px-4 py-2">
                           <input className={inputCls} value={editDraft.tool} onChange={(e) => setEditDraft({ ...editDraft, tool: e.target.value })} />
+                        </td>
+                        <td className="px-4 py-2">
+                          <select className={`${inputCls} w-32`} value={editDraft.team} onChange={(e) => setEditDraft({ ...editDraft, team: e.target.value })}>
+                            <option value="">—</option>
+                            {TEAMS.map((t) => <option key={t} value={t}>{t}</option>)}
+                          </select>
                         </td>
                         <td className="px-4 py-2">
                           <input className={`${inputCls} w-28`} inputMode="decimal" value={editDraft.costPerSeat} onChange={(e) => setEditDraft({ ...editDraft, costPerSeat: e.target.value })} />
@@ -251,6 +296,15 @@ export default function SubscriptionsPage() {
                     ) : (
                       <tr key={s.id} className="text-psa-ink">
                         <td className="px-4 py-3 font-medium">{s.tool}</td>
+                        <td className="px-4 py-3">
+                          {s.team ? (
+                            <span className="inline-flex items-center rounded-full bg-psa-blue-soft px-2 py-0.5 text-xs font-medium text-psa-blue">
+                              {s.team}
+                            </span>
+                          ) : (
+                            <span className="text-psa-muted">—</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 tabular-nums">{formatMoney(s.costPerSeat, s.currency)}</td>
                         <td className="px-4 py-3 tabular-nums">{s.seats}</td>
                         <td className="px-4 py-3 font-semibold tabular-nums text-psa-orange">{formatMoney(s.monthly, s.currency)}</td>
@@ -276,6 +330,12 @@ export default function SubscriptionsPage() {
                 <tr className="border-t border-psa-line bg-psa-bg/40">
                   <td className="px-4 py-3">
                     <input className={inputCls} placeholder="ex.: ChatGPT Team" value={draft.tool} onChange={(e) => setDraft({ ...draft, tool: e.target.value })} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <select className={`${inputCls} w-32`} value={draft.team} onChange={(e) => setDraft({ ...draft, team: e.target.value })}>
+                      <option value="">—</option>
+                      {TEAMS.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
                   </td>
                   <td className="px-4 py-3">
                     <input className={`${inputCls} w-28`} inputMode="decimal" placeholder="30,00" value={draft.costPerSeat} onChange={(e) => setDraft({ ...draft, costPerSeat: e.target.value })} />

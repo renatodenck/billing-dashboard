@@ -842,9 +842,14 @@ function SubscriptionsCard() {
             <ul className="min-w-0 flex-1 space-y-1.5 sm:max-w-md">
               {items.map((s) => (
                 <li key={s.id} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="truncate text-psa-ink">
+                  <span className="flex min-w-0 items-center gap-2 truncate text-psa-ink">
                     {s.tool}
-                    <span className="ml-2 text-xs text-psa-muted">
+                    {s.team && (
+                      <span className="inline-flex shrink-0 items-center rounded-full bg-psa-blue-soft px-2 py-0.5 text-[10px] font-medium text-psa-blue">
+                        {s.team}
+                      </span>
+                    )}
+                    <span className="text-xs text-psa-muted">
                       {s.seats} × {formatMoney(s.costPerSeat, s.currency)}
                     </span>
                   </span>

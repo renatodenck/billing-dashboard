@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { asc } from "drizzle-orm";
 import { db } from "@/db";
 import { subscriptions } from "@/db/schema";
+import { isTeam } from "@/lib/teams";
 
 export const dynamic = "force-dynamic";
 
 export type SubscriptionDTO = {
   id: number;
   tool: string;
+  team: string | null;
   costPerSeat: number;
   seats: number;
   currency: string;
@@ -17,6 +19,7 @@ export type SubscriptionDTO = {
 
 type ParsedBody = {
   tool: string;
+  team: string | null;
   costPerSeat: number;
   seats: number;
   currency: string;
@@ -58,6 +61,11 @@ export function parseBody(
   } else if (!partial) {
     out.notes = null;
   }
+  if (has("team")) {
+    out.team = isTeam(b.team) ? b.team : null;
+  } else if (!partial) {
+    out.team = null;
+  }
 
   return out;
 }
@@ -69,6 +77,7 @@ export async function GET() {
     return {
       id: r.id,
       tool: r.tool,
+      team: r.team,
       costPerSeat,
       seats: r.seats,
       currency: r.currency,
@@ -90,6 +99,7 @@ export async function POST(req: Request) {
     .insert(subscriptions)
     .values({
       tool: p.tool,
+      team: p.team,
       costPerSeat: p.costPerSeat.toFixed(4),
       seats: p.seats,
       currency: p.currency,
