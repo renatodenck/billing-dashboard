@@ -12,8 +12,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Users } from "lucide-react";
 import type { DashboardPayload } from "./api/data/route";
+import type { SubscriptionDTO } from "./api/subscriptions/route";
 import { formatDateBR, formatMoney } from "@/lib/format";
 import {
   filterDaily,
@@ -116,6 +117,12 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-2">
             <a
+              href="/assinaturas"
+              className="inline-flex items-center gap-2 rounded-full border border-psa-line bg-white px-4 py-1.5 text-sm font-medium text-psa-ink transition hover:border-psa-orange hover:text-psa-orange"
+            >
+              Assinaturas
+            </a>
+            <a
               href="/templates"
               className="inline-flex items-center gap-2 rounded-full border border-psa-line bg-white px-4 py-1.5 text-sm font-medium text-psa-ink transition hover:border-psa-orange hover:text-psa-orange"
             >
@@ -181,6 +188,10 @@ export default function DashboardPage() {
         <div className="mb-6 grid gap-6 md:grid-cols-2">
           <SourceCard source="openai" data={data} range={range} />
           <SourceCard source="anthropic" data={data} range={range} />
+        </div>
+
+        <div className="mb-6">
+          <SubscriptionsCard />
         </div>
 
         <div className="mb-6 grid gap-6 md:grid-cols-2">
@@ -757,6 +768,94 @@ function MeetingsCard({
             </ResponsiveContainer>
           )}
         </div>
+      </div>
+    </section>
+  );
+}
+
+function SubscriptionsCard() {
+  const [items, setItems] = useState<SubscriptionDTO[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/subscriptions", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: SubscriptionDTO[]) => setItems(d))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }, []);
+
+  const totalsByCurrency = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of items ?? []) m.set(s.currency, (m.get(s.currency) ?? 0) + s.monthly);
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [items]);
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-psa-line bg-white shadow-sm">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-psa-line px-6 py-4">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-psa-blue-soft text-psa-blue">
+            <Users className="h-4 w-4" />
+          </span>
+          <div>
+            <h3 className="text-base font-semibold text-psa-ink">Assinaturas de usuários</h3>
+            <p className="text-xs text-psa-muted">
+              Custo de assentos (ChatGPT Team, Claude Team…) · cadastro manual, não vem de API
+            </p>
+          </div>
+        </div>
+        <a
+          href="/assinaturas"
+          className="inline-flex items-center gap-1.5 rounded-full border border-psa-line px-3 py-1.5 text-xs font-medium text-psa-ink transition hover:border-psa-orange hover:text-psa-orange"
+        >
+          Gerenciar
+        </a>
+      </header>
+
+      <div className="px-6 py-5">
+        {error ? (
+          <p className="text-sm text-red-600">Erro ao carregar assinaturas: {error}</p>
+        ) : items === null ? (
+          <p className="text-sm text-psa-muted">Carregando…</p>
+        ) : items.length === 0 ? (
+          <p className="text-sm text-psa-muted">
+            Nenhuma assinatura cadastrada.{" "}
+            <a href="/assinaturas" className="font-medium text-psa-orange hover:underline">
+              Adicionar a primeira →
+            </a>
+          </p>
+        ) : (
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-psa-muted">
+                Total mensal
+              </p>
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                {totalsByCurrency.map(([cur, total]) => (
+                  <span key={cur} className="text-2xl font-semibold tabular-nums text-psa-orange">
+                    {formatMoney(total, cur)}
+                    <span className="ml-1 text-xs font-normal text-psa-muted">/mês</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+            <ul className="min-w-0 flex-1 space-y-1.5 sm:max-w-md">
+              {items.map((s) => (
+                <li key={s.id} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="truncate text-psa-ink">
+                    {s.tool}
+                    <span className="ml-2 text-xs text-psa-muted">
+                      {s.seats} × {formatMoney(s.costPerSeat, s.currency)}
+                    </span>
+                  </span>
+                  <span className="whitespace-nowrap font-medium tabular-nums text-psa-ink">
+                    {formatMoney(s.monthly, s.currency)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </section>
   );

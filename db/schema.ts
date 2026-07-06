@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, numeric, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, numeric, jsonb, integer, index, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const snapshots = pgTable(
   "snapshots",
@@ -61,6 +61,20 @@ export const kvCache = pgTable("kv_cache", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Assinaturas por assento (ChatGPT Team, Claude Team etc.) — custo que NÃO vem
+// de nenhuma API de uso; cadastrado manualmente pela tela /assinaturas.
+export const subscriptions = pgTable("subscriptions", {
+  id: serial("id").primaryKey(),
+  tool: text("tool").notNull(),
+  costPerSeat: numeric("cost_per_seat", { precision: 14, scale: 4 }).notNull(),
+  seats: integer("seats").notNull().default(1),
+  currency: text("currency").notNull().default("USD"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type Snapshot = typeof snapshots.$inferSelect;
+export type Subscription = typeof subscriptions.$inferSelect;
 export type DailySpend = typeof dailySpend.$inferSelect;
 export type PageClick = typeof pageClicks.$inferSelect;
