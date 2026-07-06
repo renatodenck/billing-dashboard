@@ -34,6 +34,12 @@ const SOURCE_META = {
 
 type SourceKey = keyof typeof SOURCE_META;
 
+// Fontes cujo gasto se divide em tokens de modelo (linha laranja) vs. tudo o
+// mais que a plataforma cobra — web search, code execution, storage, imagens
+// (linha azul).
+const TOKEN_SPLIT_SOURCES = new Set<SourceKey>(["openai", "anthropic"]);
+const OTHER_COST_COLOR = "#2563EB";
+
 const PRESET_ORDER: RangePreset[] = [
   "today",
   "yesterday",
@@ -297,6 +303,20 @@ function SourceCard({
   const filtered = useMemo(() => filterDaily(dailyAll, range), [dailyAll, range]);
   const stats = useMemo(() => rangeStats(filtered), [filtered]);
 
+  const hasSplit = TOKEN_SPLIT_SOURCES.has(source);
+  // Enquanto a quebra da API não é gravada, `tokens`/`other` vêm indefinidos:
+  // a linha laranja mostra o total (como hoje) e a azul fica zerada.
+  const chartData = useMemo(
+    () =>
+      filtered.map((d) => ({
+        day: d.day,
+        amount: d.amount,
+        tokens: d.tokens ?? d.amount,
+        other: d.other ?? 0,
+      })),
+    [filtered]
+  );
+
   const currency = summary?.currency ?? "USD";
 
   return (
@@ -341,6 +361,26 @@ function SourceCard({
       </div>
 
       <div className="px-4 pb-5 pt-4">
+        {hasSplit && filtered.length > 0 && (
+          <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[11px] text-psa-muted">
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="inline-block h-2 w-2 rounded-full"
+                style={{ background: meta.accent }}
+              />
+              <span className="font-medium text-psa-ink">Tokens</span>
+              <span>· uso do modelo</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="inline-block h-2 w-2 rounded-full"
+                style={{ background: OTHER_COST_COLOR }}
+              />
+              <span className="font-medium text-psa-ink">Outros custos</span>
+              <span>· web search, code execution, storage…</span>
+            </span>
+          </div>
+        )}
         <div className="h-44">
           {filtered.length === 0 ? (
             <div className="flex h-full items-center justify-center text-sm text-psa-muted">
@@ -350,11 +390,15 @@ function SourceCard({
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={filtered} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
+              <AreaChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
                 <defs>
                   <linearGradient id={`grad-${source}`} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={meta.accent} stopOpacity={0.35} />
                     <stop offset="100%" stopColor={meta.accent} stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id={`grad-other-${source}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={OTHER_COST_COLOR} stopOpacity={0.28} />
+                    <stop offset="100%" stopColor={OTHER_COST_COLOR} stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid stroke="#EEF1F5" vertical={false} />
@@ -386,15 +430,40 @@ function SourceCard({
                   }}
                   labelStyle={{ color: "#0B1320", fontWeight: 600 }}
                   labelFormatter={formatDateBR}
-                  formatter={(value: number) => [formatMoney(value, currency), "Gasto"]}
+                  formatter={(value: number, name) =>
+                    hasSplit
+                      ? [formatMoney(value, currency), name]
+                      : [formatMoney(value, currency), "Gasto"]
+                  }
                 />
-                <Area
-                  type="monotone"
-                  dataKey="amount"
-                  stroke={meta.accent}
-                  strokeWidth={2.5}
-                  fill={`url(#grad-${source})`}
-                />
+                {hasSplit ? (
+                  <>
+                    <Area
+                      type="monotone"
+                      dataKey="tokens"
+                      name="Tokens"
+                      stroke={meta.accent}
+                      strokeWidth={2.5}
+                      fill={`url(#grad-${source})`}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="other"
+                      name="Outros custos"
+                      stroke={OTHER_COST_COLOR}
+                      strokeWidth={2}
+                      fill={`url(#grad-other-${source})`}
+                    />
+                  </>
+                ) : (
+                  <Area
+                    type="monotone"
+                    dataKey="amount"
+                    stroke={meta.accent}
+                    strokeWidth={2.5}
+                    fill={`url(#grad-${source})`}
+                  />
+                )}
               </AreaChart>
             </ResponsiveContainer>
           )}

@@ -21,8 +21,16 @@ export type OpenAIUsage = {
   totalSpent: number;
   spentToday: number;
   spentMonth: number;
-  daily: Array<{ day: string; amount: number }>;
+  daily: Array<{ day: string; amount: number; tokens: number }>;
 };
+
+// Uso de modelo aparece como line_item "<modelo>, input | output | cached input".
+// Tudo o mais (whisper, ferramentas, storage, imagens, fine-tuning) é "outro custo".
+const OPENAI_TOKEN_LINE_ITEM = /,\s*(input|output|cached input)\s*$/i;
+
+function isOpenAIToken(lineItem: string | null | undefined): boolean {
+  return typeof lineItem === "string" && OPENAI_TOKEN_LINE_ITEM.test(lineItem);
+}
 
 function dayKey(unix: number): string {
   return new Date(unix * 1000).toISOString().slice(0, 10);
@@ -54,6 +62,7 @@ export async function fetchOpenAIUsage(adminKey: string, days = 60): Promise<Ope
       bucket_width: "1d",
       limit: "180",
     });
+    params.append("group_by", "line_item");
     if (nextPage) params.set("page", nextPage);
 
     const res = await fetch(`${ENDPOINT}?${params.toString()}`, {
@@ -75,18 +84,21 @@ export async function fetchOpenAIUsage(adminKey: string, days = 60): Promise<Ope
   } while (nextPage);
 
   let currency = "USD";
-  const daily: Array<{ day: string; amount: number }> = [];
+  const daily: Array<{ day: string; amount: number; tokens: number }> = [];
   let totalSpent = 0;
 
   for (const b of buckets) {
     const day = dayKey(b.start_time);
     let amount = 0;
+    let tokens = 0;
     for (const r of b.results) {
       const value = typeof r.amount.value === "string" ? parseFloat(r.amount.value) : r.amount.value;
-      amount += Number.isFinite(value) ? value : 0;
+      const v = Number.isFinite(value) ? value : 0;
+      amount += v;
+      if (isOpenAIToken(r.line_item)) tokens += v;
       if (r.amount.currency) currency = r.amount.currency.toUpperCase();
     }
-    daily.push({ day, amount });
+    daily.push({ day, amount, tokens });
     totalSpent += amount;
   }
 

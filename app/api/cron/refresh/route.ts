@@ -252,10 +252,11 @@ async function captureHubSpot(
 async function upsertDaily(
   source: string,
   currency: string,
-  daily: Array<{ day: string; amount: number }>
+  daily: Array<{ day: string; amount: number; tokens?: number }>
 ) {
   if (daily.length === 0) return;
   for (const d of daily) {
+    const tokensAmount = d.tokens != null ? d.tokens.toFixed(4) : null;
     await db
       .insert(dailySpend)
       .values({
@@ -263,11 +264,13 @@ async function upsertDaily(
         day: d.day,
         currency,
         amount: d.amount.toFixed(4),
+        tokensAmount,
       })
       .onConflictDoUpdate({
         target: [dailySpend.source, dailySpend.day],
         set: {
           amount: d.amount.toFixed(4),
+          tokensAmount,
           currency,
           updatedAt: sql`now()`,
         },

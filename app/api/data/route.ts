@@ -18,7 +18,14 @@ export type DashboardPayload = {
       accountName: string | null;
     }
   >;
-  daily: Record<string, Array<{ day: string; amount: number }>>;
+  daily: Record<
+    string,
+    // `tokens` = uso de modelo (linha laranja); `other` = tudo o mais que a
+    // plataforma cobra (web search, code execution, storage, imagens…) — linha
+    // azul. Opcionais: ainda não gravados no banco; o gráfico usa fallbacks até
+    // a quebra da API ser ligada.
+    Array<{ day: string; amount: number; tokens?: number; other?: number }>
+  >;
 };
 
 export async function GET() {
@@ -77,7 +84,12 @@ export async function GET() {
       .where(eq(dailySpend.source, source))
       .orderBy(dailySpend.day);
 
-    result.daily[source] = daily.map((d) => ({ day: d.day, amount: Number(d.amount) }));
+    result.daily[source] = daily.map((d) => {
+      const amount = Number(d.amount);
+      if (d.tokensAmount == null) return { day: d.day, amount };
+      const tokens = Number(d.tokensAmount);
+      return { day: d.day, amount, tokens, other: Math.max(0, amount - tokens) };
+    });
   }
 
   return NextResponse.json(result, {

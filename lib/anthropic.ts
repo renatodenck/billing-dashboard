@@ -9,6 +9,7 @@ type CostBucket = {
     currency?: string;
     amount?: string | number;
     workspace_id?: string | null;
+    description?: string | null;
   }>;
 };
 
@@ -23,8 +24,16 @@ export type AnthropicUsage = {
   totalSpent: number;
   spentToday: number;
   spentMonth: number;
-  daily: Array<{ day: string; amount: number }>;
+  daily: Array<{ day: string; amount: number; tokens: number }>;
 };
+
+// A cost_report só permite group_by[] por "description" ou "workspace_id".
+// As descrições de uso de modelo contêm "Tokens" (Input/Output Tokens, Cache
+// Hit/Write). Ferramentas cobradas à parte (web search, code execution) têm
+// outras descrições e caem em "outros custos".
+function isAnthropicToken(description: string | null | undefined): boolean {
+  return typeof description === "string" && /token/i.test(description);
+}
 
 function startOfMonthBR(): string {
   const today = brDay();
@@ -46,6 +55,7 @@ export async function fetchAnthropicUsage(adminKey: string, days = 60): Promise<
       bucket_width: "1d",
       limit: "31",
     });
+    params.append("group_by[]", "description");
     if (nextPage) params.set("page", nextPage);
 
     const res = await fetch(`${ENDPOINT}?${params.toString()}`, {
@@ -69,23 +79,30 @@ export async function fetchAnthropicUsage(adminKey: string, days = 60): Promise<
 
   let currency = "USD";
   const byDay = new Map<string, number>();
+  const byDayTokens = new Map<string, number>();
 
   for (const b of buckets) {
     // Use UTC day from starting_at (matches Anthropic console and OpenAI behavior).
     const day = b.starting_at.slice(0, 10);
     let amount = byDay.get(day) ?? 0;
+    let tokens = byDayTokens.get(day) ?? 0;
     for (const r of b.results) {
       const raw = r.amount;
       const v = typeof raw === "string" ? parseFloat(raw) : typeof raw === "number" ? raw : 0;
       // Anthropic Cost Report API returns amounts in cents (minor unit). Convert to dollars.
-      if (Number.isFinite(v)) amount += v / 100;
+      if (Number.isFinite(v)) {
+        const dollars = v / 100;
+        amount += dollars;
+        if (isAnthropicToken(r.description)) tokens += dollars;
+      }
       if (r.currency) currency = r.currency.toUpperCase();
     }
     byDay.set(day, amount);
+    byDayTokens.set(day, tokens);
   }
 
   const daily = Array.from(byDay.entries())
-    .map(([day, amount]) => ({ day, amount }))
+    .map(([day, amount]) => ({ day, amount, tokens: byDayTokens.get(day) ?? 0 }))
     .sort((a, b) => (a.day < b.day ? -1 : 1));
 
   const today = brDay();

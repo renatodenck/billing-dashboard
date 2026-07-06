@@ -27,6 +27,11 @@ export const dailySpend = pgTable(
     day: text("day").notNull(),
     currency: text("currency").notNull(),
     amount: numeric("amount", { precision: 14, scale: 4 }).notNull(),
+    // Parcela de `amount` que é uso de modelo (tokens). O restante
+    // (amount - tokensAmount) é "outros custos": web search, code execution,
+    // storage, imagens, áudio. Nulo para fontes sem essa quebra (WhatsApp,
+    // HubSpot) e para linhas antigas anteriores a esta coluna.
+    tokensAmount: numeric("tokens_amount", { precision: 14, scale: 4 }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
