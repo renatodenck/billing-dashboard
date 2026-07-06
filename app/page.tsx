@@ -436,27 +436,33 @@ function SourceCard({
                       : [formatMoney(value, currency), "Gasto"]
                   }
                 />
-                {hasSplit ? (
-                  <>
-                    <Area
-                      type="monotone"
-                      dataKey="tokens"
-                      name="Tokens"
-                      stroke={meta.accent}
-                      strokeWidth={2.5}
-                      fill={`url(#grad-${source})`}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="other"
-                      name="Outros custos"
-                      stroke={OTHER_COST_COLOR}
-                      strokeWidth={2}
-                      fill={`url(#grad-other-${source})`}
-                    />
-                  </>
-                ) : (
+                {/* Areas como filhos diretos (sem Fragment): o Recharts só
+                    detecta componentes de série varrendo os filhos por tipo. */}
+                {hasSplit && (
                   <Area
+                    key="tokens"
+                    type="monotone"
+                    dataKey="tokens"
+                    name="Tokens"
+                    stroke={meta.accent}
+                    strokeWidth={2.5}
+                    fill={`url(#grad-${source})`}
+                  />
+                )}
+                {hasSplit && (
+                  <Area
+                    key="other"
+                    type="monotone"
+                    dataKey="other"
+                    name="Outros custos"
+                    stroke={OTHER_COST_COLOR}
+                    strokeWidth={2}
+                    fill={`url(#grad-other-${source})`}
+                  />
+                )}
+                {!hasSplit && (
+                  <Area
+                    key="amount"
                     type="monotone"
                     dataKey="amount"
                     stroke={meta.accent}
