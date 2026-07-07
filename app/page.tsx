@@ -12,7 +12,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { RefreshCw, Users } from "lucide-react";
+import { RefreshCw, Users, LogOut } from "lucide-react";
+import { signOut } from "next-auth/react";
 import type { DashboardPayload } from "./api/data/route";
 import type { SubscriptionDTO } from "./api/subscriptions/route";
 import { formatDateBR, formatMoney } from "@/lib/format";
@@ -135,6 +136,14 @@ export default function DashboardPage() {
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
               Atualizar
+            </button>
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="inline-flex items-center gap-2 rounded-full border border-psa-line bg-white px-4 py-1.5 text-sm font-medium text-psa-muted transition hover:border-psa-orange hover:text-psa-orange"
+              title="Sair"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Sair
             </button>
           </div>
         </div>
