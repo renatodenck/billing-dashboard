@@ -41,6 +41,13 @@ type SourceKey = keyof typeof SOURCE_META;
 const TOKEN_SPLIT_SOURCES = new Set<SourceKey>(["openai", "anthropic"]);
 const OTHER_COST_COLOR = "#2563EB";
 
+// Casa uma assinatura (pelo nome da ferramenta) ao provedor do card, pra mostrar
+// o custo de assinatura junto do gasto de API na mesma coluna.
+const SUB_MATCH: Partial<Record<SourceKey, RegExp>> = {
+  openai: /chatgpt|openai|gpt/i,
+  anthropic: /claude|anthropic/i,
+};
+
 const PRESET_ORDER: RangePreset[] = [
   "today",
   "yesterday",
@@ -80,6 +87,16 @@ export default function DashboardPage() {
 
   useEffect(() => {
     load();
+  }, []);
+
+  // Assinaturas buscadas uma vez e repassadas aos cards de provedor (para a
+  // linha "Assinaturas · R$ X/mês") — falha em silêncio pra não afetar o painel.
+  const [subscriptions, setSubscriptions] = useState<SubscriptionDTO[]>([]);
+  useEffect(() => {
+    fetch("/api/subscriptions", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: SubscriptionDTO[]) => setSubscriptions(d))
+      .catch(() => setSubscriptions([]));
   }, []);
 
   const allDaily = useMemo(() => {
@@ -186,8 +203,8 @@ export default function DashboardPage() {
         )}
 
         <div className="mb-6 grid gap-6 md:grid-cols-2">
-          <SourceCard source="openai" data={data} range={range} />
-          <SourceCard source="anthropic" data={data} range={range} />
+          <SourceCard source="openai" data={data} range={range} subscriptions={subscriptions} />
+          <SourceCard source="anthropic" data={data} range={range} subscriptions={subscriptions} />
         </div>
 
         <div className="mb-6">
@@ -195,8 +212,8 @@ export default function DashboardPage() {
         </div>
 
         <div className="mb-6 grid gap-6 md:grid-cols-2">
-          <SourceCard source="meta" data={data} range={range} />
-          <SourceCard source="meta_b2b" data={data} range={range} />
+          <SourceCard source="meta" data={data} range={range} subscriptions={subscriptions} />
+          <SourceCard source="meta_b2b" data={data} range={range} subscriptions={subscriptions} />
         </div>
 
         <div className="mb-6 grid gap-6 md:grid-cols-2">
@@ -302,14 +319,31 @@ function SourceCard({
   source,
   data,
   range,
+  subscriptions = [],
 }: {
   source: SourceKey;
   data: DashboardPayload | null;
   range: DateRange;
+  subscriptions?: SubscriptionDTO[];
 }) {
   const meta = SOURCE_META[source];
   const summary = data?.sources[source];
   const dailyAll = data?.daily[source] ?? [];
+
+  // Assinaturas deste provedor (ex.: Claude no card da Anthropic).
+  const providerSubs = useMemo(() => {
+    const re = SUB_MATCH[source];
+    return re ? subscriptions.filter((s) => re.test(s.tool)) : [];
+  }, [subscriptions, source]);
+  const subTotals = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of providerSubs) m.set(s.currency, (m.get(s.currency) ?? 0) + s.monthly);
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [providerSubs]);
+  const subDueDays = useMemo(() => {
+    const days = [...new Set(providerSubs.map((s) => s.billingDay).filter((d): d is number => d != null))];
+    return days.sort((a, b) => a - b);
+  }, [providerSubs]);
 
   const filtered = useMemo(() => filterDaily(dailyAll, range), [dailyAll, range]);
   const stats = useMemo(() => rangeStats(filtered), [filtered]);
@@ -370,6 +404,30 @@ function SourceCard({
         />
         <Stat label="Moeda" raw={currency} />
       </div>
+
+      {providerSubs.length > 0 && (
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-t border-psa-line px-6 py-3 text-sm">
+          <span className="text-psa-muted">Assinaturas:</span>
+          <span className="font-semibold tabular-nums text-psa-ink">
+            {subTotals.map(([cur, total]) => formatMoney(total, cur)).join(" + ")}
+          </span>
+          <span className="text-xs text-psa-muted">/mês</span>
+          {subDueDays.length > 0 && (
+            <span className="text-xs text-psa-muted">
+              · vence{" "}
+              {subDueDays.length === 1
+                ? `dia ${subDueDays[0]}`
+                : `dias ${subDueDays.join(", ")}`}
+            </span>
+          )}
+          <a
+            href="/assinaturas"
+            className="ml-auto text-xs font-medium text-psa-orange hover:underline"
+          >
+            Gerenciar
+          </a>
+        </div>
+      )}
 
       <div className="px-4 pb-5 pt-4">
         {hasSplit && filtered.length > 0 && (
