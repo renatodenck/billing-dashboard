@@ -31,6 +31,7 @@ const SOURCE_META = {
   anthropic: { label: "Anthropic", accent: "#CC785C", soft: "#F5E1D6", caption: "Claude (Sonnet/Opus)" },
   meta: { label: "WhatsApp B2C", accent: "#053CAA", soft: "#E1E9FF", caption: "Custo de disparo" },
   meta_b2b: { label: "WhatsApp B2B", accent: "#1E3A8A", soft: "#DBEAFE", caption: "Custo de disparo" },
+  meta_palestrante: { label: "WhatsApp Palestrante", accent: "#059669", soft: "#D1FAE5", caption: "Custo de disparo · Ariadne" },
 } as const;
 
 type SourceKey = keyof typeof SOURCE_META;
@@ -214,6 +215,7 @@ export default function DashboardPage() {
         <div className="mb-6 grid gap-6 md:grid-cols-2">
           <SourceCard source="meta" data={data} range={range} subscriptions={subscriptions} />
           <SourceCard source="meta_b2b" data={data} range={range} subscriptions={subscriptions} />
+          <SourceCard source="meta_palestrante" data={data} range={range} subscriptions={subscriptions} />
         </div>
 
         <div className="mb-6 grid gap-6 md:grid-cols-2">

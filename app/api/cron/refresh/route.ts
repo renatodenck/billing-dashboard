@@ -50,6 +50,13 @@ async function runRefresh() {
       results,
       errors
     ),
+    captureMeta(
+      "meta_palestrante",
+      process.env.META_ACCESS_TOKEN_PALESTRANTE?.trim() ?? process.env.META_ACCESS_TOKEN?.trim(),
+      process.env.META_WABA_PALESTRANTE_ID?.trim(),
+      results,
+      errors
+    ),
     captureHubSpot(
       "hubspot_b2c",
       process.env.HUBSPOT_TOKEN?.trim(),
