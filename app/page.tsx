@@ -15,6 +15,7 @@ import {
 import { RefreshCw, Users } from "lucide-react";
 import type { DashboardPayload } from "./api/data/route";
 import type { SubscriptionDTO } from "./api/subscriptions/route";
+import type { KeyUsage } from "@/lib/anthropicUsage";
 import { formatDateBR, formatMoney } from "@/lib/format";
 import {
   filterDaily,
@@ -210,6 +211,10 @@ export default function DashboardPage() {
 
         <div className="mb-6">
           <SubscriptionsCard />
+        </div>
+
+        <div className="mb-6">
+          <UsageByKeyCard range={range} />
         </div>
 
         <div className="mb-6 grid gap-6 md:grid-cols-2">
@@ -828,6 +833,98 @@ function MeetingsCard({
             </ResponsiveContainer>
           )}
         </div>
+      </div>
+    </section>
+  );
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1e9) return `${(n / 1e9).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} bi`;
+  if (n >= 1e6) return `${(n / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} mi`;
+  if (n >= 1e3) return `${(n / 1e3).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} k`;
+  return n.toLocaleString("pt-BR");
+}
+
+function UsageByKeyCard({ range }: { range: DateRange }) {
+  const [items, setItems] = useState<KeyUsage[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setItems(null);
+    setError(null);
+    fetch(`/api/usage-by-key?since=${range.since}&until=${range.until}`, { cache: "no-store" })
+      .then((r) =>
+        r.ok
+          ? r.json()
+          : r.json().then((e) => Promise.reject(new Error(e.error || `HTTP ${r.status}`)))
+      )
+      .then((d: KeyUsage[]) => setItems(d))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }, [range.since, range.until]);
+
+  const total = useMemo(() => (items ?? []).reduce((s, i) => s + i.totalTokens, 0), [items]);
+  const max = useMemo(() => (items ?? []).reduce((m, i) => Math.max(m, i.totalTokens), 0), [items]);
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-psa-line bg-white shadow-sm">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-psa-line px-6 py-4">
+        <div className="flex items-center gap-3">
+          <span
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold"
+            style={{ background: "#F5E1D6", color: "#CC785C" }}
+          >
+            A
+          </span>
+          <div>
+            <h3 className="text-base font-semibold text-psa-ink">Uso por integração · Anthropic</h3>
+            <p className="text-xs text-psa-muted">
+              Tokens consumidos por cada chave de API no período selecionado
+            </p>
+          </div>
+        </div>
+      </header>
+      <div className="px-6 py-5">
+        {error ? (
+          <p className="text-sm text-red-600">Erro ao carregar: {error}</p>
+        ) : items === null ? (
+          <p className="text-sm text-psa-muted">Carregando…</p>
+        ) : items.length === 0 ? (
+          <p className="text-sm text-psa-muted">Sem uso no período selecionado.</p>
+        ) : (
+          <ul className="space-y-3">
+            {items.map((k) => {
+              const pct = total > 0 ? (100 * k.totalTokens) / total : 0;
+              const barPct = max > 0 ? (100 * k.totalTokens) / max : 0;
+              return (
+                <li key={k.keyId}>
+                  <div className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="flex min-w-0 items-center gap-2 truncate">
+                      <span className="truncate font-medium text-psa-ink">{k.name}</span>
+                      {k.status === "archived" && (
+                        <span className="shrink-0 rounded-full bg-psa-line/60 px-1.5 py-0.5 text-[10px] text-psa-muted">
+                          arquivada
+                        </span>
+                      )}
+                    </span>
+                    <span className="whitespace-nowrap tabular-nums text-psa-ink">
+                      {formatTokens(k.totalTokens)}{" "}
+                      <span className="text-xs text-psa-muted">tokens · {pct.toFixed(0)}%</span>
+                    </span>
+                  </div>
+                  <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-psa-line/40">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${barPct}%`, background: "#CC785C" }}
+                    />
+                  </div>
+                  <div className="mt-1 text-[11px] text-psa-muted">
+                    entrada {formatTokens(k.inputTokens)} · saída {formatTokens(k.outputTokens)}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
     </section>
   );
