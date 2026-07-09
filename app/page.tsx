@@ -773,9 +773,42 @@ function MeetingsCard({
   );
 }
 
+// Próxima data (>= hoje) em que cai algum dos dias de vencimento informados,
+// tratando meses mais curtos (ex.: dia 31 em fevereiro cai no último dia).
+function nextBillingDate(days: number[]): Date | null {
+  if (days.length === 0) return null;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let best: Date | null = null;
+  for (const day of days) {
+    for (let add = 0; add < 13; add++) {
+      const mm = now.getMonth() + add;
+      const year = now.getFullYear() + Math.floor(mm / 12);
+      const month = ((mm % 12) + 12) % 12;
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const d = new Date(year, month, Math.min(day, daysInMonth));
+      if (d >= today) {
+        if (!best || d < best) best = d;
+        break;
+      }
+    }
+  }
+  return best;
+}
+
 function SubscriptionsCard() {
   const [items, setItems] = useState<SubscriptionDTO[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const nextDue = useMemo(
+    () =>
+      nextBillingDate(
+        (items ?? [])
+          .map((s) => s.billingDay)
+          .filter((d): d is number => d != null)
+      ),
+    [items]
+  );
 
   useEffect(() => {
     fetch("/api/subscriptions", { cache: "no-store" })
@@ -838,6 +871,14 @@ function SubscriptionsCard() {
                   </span>
                 ))}
               </div>
+              {nextDue && (
+                <p className="mt-2 text-xs text-psa-muted">
+                  Próximo vencimento:{" "}
+                  <span className="font-medium text-psa-ink">
+                    {nextDue.toLocaleDateString("pt-BR")}
+                  </span>
+                </p>
+              )}
             </div>
             <ul className="min-w-0 flex-1 space-y-1.5 sm:max-w-md">
               {items.map((s) => (
@@ -851,6 +892,7 @@ function SubscriptionsCard() {
                     )}
                     <span className="text-xs text-psa-muted">
                       {s.seats} × {formatMoney(s.costPerSeat, s.currency)}
+                      {s.billingDay != null ? ` · vence dia ${s.billingDay}` : ""}
                     </span>
                   </span>
                   <span className="whitespace-nowrap font-medium tabular-nums text-psa-ink">

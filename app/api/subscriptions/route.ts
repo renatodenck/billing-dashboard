@@ -13,6 +13,7 @@ export type SubscriptionDTO = {
   costPerSeat: number;
   seats: number;
   currency: string;
+  billingDay: number | null;
   notes: string | null;
   monthly: number;
 };
@@ -23,6 +24,7 @@ type ParsedBody = {
   costPerSeat: number;
   seats: number;
   currency: string;
+  billingDay: number | null;
   notes: string | null;
 };
 
@@ -66,6 +68,12 @@ export function parseBody(
   } else if (!partial) {
     out.team = null;
   }
+  if (has("billingDay")) {
+    const n = Math.trunc(Number(b.billingDay));
+    out.billingDay = Number.isFinite(n) && n >= 1 && n <= 31 ? n : null;
+  } else if (!partial) {
+    out.billingDay = null;
+  }
 
   return out;
 }
@@ -81,6 +89,7 @@ export async function GET() {
       costPerSeat,
       seats: r.seats,
       currency: r.currency,
+      billingDay: r.billingDay,
       notes: r.notes,
       monthly: costPerSeat * r.seats,
     };
@@ -103,6 +112,7 @@ export async function POST(req: Request) {
       costPerSeat: p.costPerSeat.toFixed(4),
       seats: p.seats,
       currency: p.currency,
+      billingDay: p.billingDay,
       notes: p.notes,
     })
     .returning();

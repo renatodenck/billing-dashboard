@@ -71,6 +71,8 @@ export const subscriptions = pgTable("subscriptions", {
   costPerSeat: numeric("cost_per_seat", { precision: 14, scale: 4 }).notNull(),
   seats: integer("seats").notNull().default(1),
   currency: text("currency").notNull().default("USD"),
+  // Dia do mês em que a assinatura vence/renova (1–31). Nulo = não informado.
+  billingDay: integer("billing_day"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

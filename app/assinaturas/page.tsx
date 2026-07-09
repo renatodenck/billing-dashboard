@@ -9,9 +9,9 @@ import type { SubscriptionDTO } from "../api/subscriptions/route";
 
 const CURRENCIES = ["USD", "BRL"] as const;
 
-type Draft = { tool: string; team: string; costPerSeat: string; seats: string; currency: string; notes: string };
+type Draft = { tool: string; team: string; costPerSeat: string; seats: string; currency: string; billingDay: string; notes: string };
 
-const EMPTY_DRAFT: Draft = { tool: "", team: "", costPerSeat: "", seats: "1", currency: "USD", notes: "" };
+const EMPTY_DRAFT: Draft = { tool: "", team: "", costPerSeat: "", seats: "1", currency: "USD", billingDay: "", notes: "" };
 
 export default function SubscriptionsPage() {
   const [items, setItems] = useState<SubscriptionDTO[]>([]);
@@ -67,6 +67,7 @@ export default function SubscriptionsPage() {
       costPerSeat: Number(d.costPerSeat.replace(",", ".")),
       seats: Number(d.seats),
       currency: d.currency,
+      billingDay: d.billingDay ? Number(d.billingDay) : null,
       notes: d.notes.trim() || null,
     };
   }
@@ -98,6 +99,7 @@ export default function SubscriptionsPage() {
       costPerSeat: String(s.costPerSeat),
       seats: String(s.seats),
       currency: s.currency,
+      billingDay: s.billingDay != null ? String(s.billingDay) : "",
       notes: s.notes ?? "",
     });
   }
@@ -237,6 +239,7 @@ export default function SubscriptionsPage() {
                   <th className="px-4 py-3">Assentos</th>
                   <th className="px-4 py-3">Total/mês</th>
                   <th className="px-4 py-3">Moeda</th>
+                  <th className="px-4 py-3">Vencimento</th>
                   <th className="px-4 py-3">Notas</th>
                   <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
@@ -244,11 +247,11 @@ export default function SubscriptionsPage() {
               <tbody className="divide-y divide-psa-line">
                 {loading && items.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-psa-muted">Carregando…</td>
+                    <td colSpan={9} className="px-4 py-8 text-center text-psa-muted">Carregando…</td>
                   </tr>
                 ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-psa-muted">
+                    <td colSpan={9} className="px-4 py-8 text-center text-psa-muted">
                       Nenhuma assinatura cadastrada ainda. Adicione a primeira abaixo.
                     </td>
                   </tr>
@@ -280,6 +283,9 @@ export default function SubscriptionsPage() {
                           </select>
                         </td>
                         <td className="px-4 py-2">
+                          <input className={`${inputCls} w-20`} inputMode="numeric" placeholder="27" value={editDraft.billingDay} onChange={(e) => setEditDraft({ ...editDraft, billingDay: e.target.value })} />
+                        </td>
+                        <td className="px-4 py-2">
                           <input className={inputCls} value={editDraft.notes} onChange={(e) => setEditDraft({ ...editDraft, notes: e.target.value })} />
                         </td>
                         <td className="px-4 py-2">
@@ -309,6 +315,9 @@ export default function SubscriptionsPage() {
                         <td className="px-4 py-3 tabular-nums">{s.seats}</td>
                         <td className="px-4 py-3 font-semibold tabular-nums text-psa-orange">{formatMoney(s.monthly, s.currency)}</td>
                         <td className="px-4 py-3 text-psa-muted">{s.currency}</td>
+                        <td className="px-4 py-3 text-psa-muted">
+                          {s.billingDay != null ? `dia ${s.billingDay}` : "—"}
+                        </td>
                         <td className="px-4 py-3 text-psa-muted">{s.notes ?? "—"}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
@@ -350,6 +359,9 @@ export default function SubscriptionsPage() {
                     <select className={`${inputCls} w-24`} value={draft.currency} onChange={(e) => setDraft({ ...draft, currency: e.target.value })}>
                       {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>
+                  </td>
+                  <td className="px-4 py-3">
+                    <input className={`${inputCls} w-20`} inputMode="numeric" placeholder="27" value={draft.billingDay} onChange={(e) => setDraft({ ...draft, billingDay: e.target.value })} />
                   </td>
                   <td className="px-4 py-3">
                     <input className={inputCls} placeholder="opcional" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
